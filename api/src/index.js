@@ -6,6 +6,8 @@ import {
   criarAtividade,
   listarAtividades,
   buscarAtividade,
+  alterarAtividade,
+  cancelarAtividade,
   resetAtividades
 } from './atividades.js'
 import { setRelogio, lerRelogio, resetRelogio } from './relogio.js'
@@ -13,6 +15,11 @@ import { setRelogio, lerRelogio, resetRelogio } from './relogio.js'
 const usuarioDesconhecido = 'USUARIO_DESCONHECIDO'
 const dadosInvalidos = 'DADOS_INVALIDOS'
 const somenteOrganizacao = 'SOMENTE_ORGANIZACAO'
+
+const statusDoErro = {
+  CONFLITO_DE_SALA: 409,
+  VAGAS_ABAIXO_DOS_INSCRITOS: 409
+}
 
 function identificacao(req, res, next) {
   const id = req.header('X-Usuario')
@@ -39,9 +46,15 @@ export function createApp() {
   app.get('/salas', identificacao, (_req, res) =>
     res.status(200).json(listarSalas())
   )
-  app.get('/atividades', identificacao, (_req, res) =>
-    res.status(200).json(listarAtividades())
-  )
+  app.get('/atividades', identificacao, (req, res) => {
+    const resultado = listarAtividades(req.query)
+    if (resultado && resultado.erro) {
+      return res
+        .status(422)
+        .json({ erro: resultado.erro, mensagem: 'Filtro inválido.' })
+    }
+    return res.status(200).json(resultado)
+  })
   app.get('/atividades/:id', identificacao, (req, res) => {
     const atividade = buscarAtividade(req.params.id)
     if (!atividade) {
@@ -60,7 +73,7 @@ export function createApp() {
     }
     if (atividade && atividade.erro) {
       return res
-        .status(422)
+        .status(statusDoErro[atividade.erro] ?? 422)
         .json({ erro: atividade.erro, mensagem: 'Atividade não pode ser criada.' })
     }
     if (!atividade) {
@@ -69,6 +82,34 @@ export function createApp() {
         .json({ erro: dadosInvalidos, mensagem: 'Corpo inválido para atividade.' })
     }
     return res.status(201).json(atividade)
+  })
+  app.patch('/atividades/:id', identificacao, organizacao, (req, res) => {
+    const resultado = alterarAtividade(req.params.id, req.body)
+    if (resultado && resultado.erro === 'NAO_ENCONTRADO') {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Atividade não encontrada.' })
+    }
+    if (resultado && resultado.erro) {
+      return res
+        .status(statusDoErro[resultado.erro] ?? 422)
+        .json({ erro: resultado.erro, mensagem: 'Atividade não pode ser alterada.' })
+    }
+    return res.status(200).json(resultado)
+  })
+  app.post('/atividades/:id/cancelamento', identificacao, organizacao, (req, res) => {
+    const resultado = cancelarAtividade(req.params.id)
+    if (resultado && resultado.erro === 'NAO_ENCONTRADO') {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Atividade não encontrada.' })
+    }
+    if (resultado && resultado.erro) {
+      return res
+        .status(statusDoErro[resultado.erro] ?? 422)
+        .json({ erro: resultado.erro, mensagem: 'Atividade não pode ser cancelada.' })
+    }
+    return res.status(200).json(resultado)
   })
   if (process.env.MODO_TESTE === '1') {
     app.put('/_teste/relogio', (req, res) => {

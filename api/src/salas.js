@@ -15,6 +15,10 @@ export function salaExiste(id) {
   return dados.some(s => s.id === id)
 }
 
+export function capacidadeDe(id) {
+  return dados.find(s => s.id === id)?.capacidade
+}
+
 export function resetSalas() {
   dados = [...salasIniciais]
 }
