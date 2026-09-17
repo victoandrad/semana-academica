@@ -4,6 +4,7 @@ import { render as renderDetalheAtividade } from './telas/detalhe-atividade.js'
 import { render as renderCriarAtividade } from './telas/criar-atividade.js'
 import { render as renderCodigoDoEncontro } from './telas/codigo-do-encontro.js'
 import { render as renderRegistrarPresenca } from './telas/registrar-presenca.js'
+import { render as renderMinhasInscricoes } from './telas/minhas-inscricoes.js'
 
 // As telas de cada módulo se registram aqui: { rota, titulo, render }.
 // render(container, { api, agora, parametros }) — ver .opencode/skills/nova-tela/SKILL.md
@@ -13,6 +14,7 @@ const telas = [
   { rota: 'criar-atividade', titulo: 'Criar atividade', render: renderCriarAtividade },
   { rota: 'codigo-do-encontro', titulo: 'Código do encontro', render: renderCodigoDoEncontro },
   { rota: 'registrar-presenca', titulo: 'Registrar presença (QR)', render: renderRegistrarPresenca },
+  { rota: 'minhas-inscricoes', titulo: 'Minhas inscrições', render: renderMinhasInscricoes },
   { rota: 'detalhe-atividade', titulo: 'Detalhe da atividade', render: renderDetalheAtividade, menu: false }
 ]
 

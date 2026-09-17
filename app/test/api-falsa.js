@@ -152,6 +152,106 @@ export function apiFalsaComAtividades() {
   return apiFalsa().responde('GET /atividades', 200, atividadesM1)
 }
 
+// Dados fixos das inscrições do M2, escritos à mão pelo contrato (§5 Inscricao).
+// Todas de p-carla; os atividadeId referenciam a grade de M1 (gradeM1).
+export const inscricoesM2 = [
+  {
+    id: 'ins_1a2b3c4d',
+    atividadeId: 'atv_b2c3d4e5',
+    participanteId: 'p-carla',
+    status: 'confirmada',
+    posicaoNaEspera: null,
+    convocadaAte: null,
+    criadaEm: '2026-10-13T09:00:00-03:00'
+  },
+  {
+    id: 'ins_2b3c4d5e',
+    atividadeId: 'atv_c3d4e5f6',
+    participanteId: 'p-carla',
+    status: 'em_espera',
+    posicaoNaEspera: 2,
+    convocadaAte: null,
+    criadaEm: '2026-10-13T09:05:00-03:00'
+  },
+  {
+    id: 'ins_3c4d5e6f',
+    atividadeId: 'atv_a1b2c3d4',
+    participanteId: 'p-carla',
+    status: 'convocada',
+    posicaoNaEspera: null,
+    convocadaAte: '2026-10-13T12:30:00-03:00',
+    criadaEm: '2026-10-13T09:10:00-03:00'
+  },
+  {
+    id: 'ins_4d5e6f7a',
+    atividadeId: 'atv_d4e5f6a7',
+    participanteId: 'p-carla',
+    status: 'cancelada',
+    posicaoNaEspera: null,
+    convocadaAte: null,
+    criadaEm: '2026-10-13T09:15:00-03:00'
+  },
+  {
+    id: 'ins_5e6f7a8b',
+    atividadeId: 'atv_b2c3d4e5',
+    participanteId: 'p-carla',
+    status: 'expirada',
+    posicaoNaEspera: null,
+    convocadaAte: null,
+    criadaEm: '2026-10-13T09:20:00-03:00'
+  }
+]
+
+function inscricaoComStatus(inscricao, status) {
+  return {
+    ...inscricao,
+    status,
+    posicaoNaEspera: status === 'em_espera' ? inscricao.posicaoNaEspera : null,
+    convocadaAte: status === 'convocada' ? inscricao.convocadaAte : null
+  }
+}
+
+// Falsa pronta para as telas de M2: lista de inscrições, por atividade e as
+// escritas de confirmação/cancelamento devolvendo a inscrição transicionada.
+export function apiFalsaComInscricoes() {
+  const falsa = apiFalsa()
+  falsa.responde('GET /inscricoes', 200, inscricoesM2)
+  falsa.responde('GET /atividades', 200, gradeM1)
+  for (const a of gradeM1) falsa.responde(`GET /atividades/${a.id}`, 200, a)
+  falsa.responde(
+    'GET /inscricoes?atividadeId=atv_b2c3d4e5',
+    200,
+    inscricoesM2.filter((i) => i.atividadeId === 'atv_b2c3d4e5')
+  )
+  falsa.responde(
+    'GET /inscricoes?atividadeId=atv_c3d4e5f6',
+    200,
+    inscricoesM2.filter((i) => i.atividadeId === 'atv_c3d4e5f6')
+  )
+  falsa.responde(
+    'POST /inscricoes/ins_3c4d5e6f/confirmacao',
+    200,
+    inscricaoComStatus(inscricoesM2[2], 'confirmada')
+  )
+  falsa.responde(
+    'POST /inscricoes/ins_2b3c4d5e/cancelamento',
+    200,
+    inscricaoComStatus(inscricoesM2[1], 'cancelada')
+  )
+  return falsa
+}
+
+// A grade com as rotas de M2 que a tela de detalhe da atividade consulta: por
+// padrão o participante ainda não tem inscrição (lista vazia naquela atividade).
+export function apiFalsaComGradeEInscricoes() {
+  const falsa = apiFalsaComGrade()
+  falsa.responde('GET /inscricoes?atividadeId=atv_a1b2c3d4', 200, [])
+  falsa.responde('GET /inscricoes?atividadeId=atv_b2c3d4e5', 200, [])
+  falsa.responde('GET /inscricoes?atividadeId=atv_c3d4e5f6', 200, [])
+  falsa.responde('GET /inscricoes?atividadeId=atv_d4e5f6a7', 200, [])
+  return falsa
+}
+
 function resposta(status, corpo) {
   const texto = corpo === null || corpo === undefined ? '' : JSON.stringify(corpo)
   return {
