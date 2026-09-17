@@ -1,0 +1,2325 @@
+{
+ "info": {
+  "id": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+  "slug": "kind-cactus",
+  "projectID": "cbf5108e60a26b3873bb8ce01325422ff122ab1c",
+  "directory": "C:\\semana-academica",
+  "path": "",
+  "title": "Resolver achados M3-R8/R18 com TDD",
+  "agent": "build",
+  "model": {
+   "id": "big-pickle",
+   "providerID": "opencode"
+  },
+  "version": "1.18.31",
+  "summary": {
+   "additions": 0,
+   "deletions": 0,
+   "files": 0
+  },
+  "cost": 0,
+  "tokens": {
+   "input": 72356,
+   "output": 12803,
+   "reasoning": 0,
+   "cache": {
+    "read": 1153536,
+    "write": 0
+   }
+  },
+  "time": {
+   "created": 1789681439513,
+   "updated": 1789681540348
+  }
+ },
+ "messages": [
+  {
+   "info": {
+    "role": "user",
+    "time": {
+     "created": 1789681439528
+    },
+    "agent": "build",
+    "model": {
+     "providerID": "opencode",
+     "modelID": "big-pickle"
+    },
+    "summary": {
+     "diffs": [
+      {
+       "file": "api/test/presenca-auditoria.test.js",
+       "patch": "Index: api/test/presenca-auditoria.test.js\n===================================================================\n--- api/test/presenca-auditoria.test.js\t\n+++ api/test/presenca-auditoria.test.js\t\n@@ -0,0 +1,214 @@\n+import { describe, it, before, after } from 'node:test'\n+import assert from 'node:assert/strict'\n+import { createServer } from 'node:http'\n+import { createApp } from '../src/index.js'\n+\n+function listen(app) {\n+  return new Promise((resolve, reject) => {\n+    const server = createServer(app)\n+    server.listen(0, () => {\n+      const { port } = server.address()\n+      resolve({ server, port })\n+    })\n+    server.on('error', reject)\n+  })\n+}\n+\n+function close(server) {\n+  return new Promise(resolve => server.close(resolve))\n+}\n+\n+async function reset(port) {\n+  const res = await fetch(`http://localhost:${port}/_teste/reset`, { method: 'POST' })\n+  assert.equal(res.status, 204)\n+}\n+\n+async function relogio(port, iso) {\n+  const res = await fetch(`http://localhost:${port}/_teste/relogio`, {\n+    method: 'PUT',\n+    headers: { 'Content-Type': 'application/json' },\n+    body: JSON.stringify({ agora: iso })\n+  })\n+  assert.equal(res.status, 200)\n+}\n+\n+async function criaPalestra(port, corpo = {}) {\n+  const res = await fetch(`http://localhost:${port}/atividades`, {\n+    method: 'POST',\n+    headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },\n+    body: JSON.stringify({\n+      titulo: 'Palestra de abertura',\n+      tipo: 'palestra',\n+      salaId: 'auditorio',\n+      vagas: 100,\n+      encontros: [\n+        { inicio: '2026-10-19T19:00:00-03:00', fim: '2026-10-19T22:00:00-03:00' }\n+      ],\n+      ...corpo\n+    })\n+  })\n+  assert.equal(res.status, 201)\n+  const atividade = await res.json()\n+  return { atividadeId: atividade.id, encontroId: atividade.encontros[0].id }\n+}\n+\n+async function inscreve(port, atividadeId, xUsuario) {\n+  const res = await fetch(\n+    `http://localhost:${port}/atividades/${atividadeId}/inscricoes`,\n+    {\n+      method: 'POST',\n+      headers: { 'X-Usuario': xUsuario }\n+    }\n+  )\n+  assert.equal(res.status, 201)\n+  return res.json()\n+}\n+\n+async function obtemCodigo(port, encontroId) {\n+  const res = await fetch(\n+    `http://localhost:${port}/encontros/${encontroId}/codigo`,\n+    { headers: { 'X-Usuario': 'org-ana' } }\n+  )\n+  assert.equal(res.status, 200)\n+  return (await res.json()).codigo\n+}\n+\n+async function enviaPresenca(port, encontroId, xUsuario, codigo) {\n+  const res = await fetch(\n+    `http://localhost:${port}/encontros/${encontroId}/presencas`,\n+    {\n+      method: 'POST',\n+      headers: { 'Content-Type': 'application/json', 'X-Usuario': xUsuario },\n+      body: JSON.stringify({ codigo })\n+    }\n+  )\n+  return { status: res.status, body: await res.json() }\n+}\n+\n+async function enviaManual(port, encontroId, corpo, xUsuario) {\n+  const res = await fetch(\n+    `http://localhost:${port}/encontros/${encontroId}/presencas/manual`,\n+    {\n+      method: 'POST',\n+      headers: { 'Content-Type': 'application/json', 'X-Usuario': xUsuario },\n+      body: JSON.stringify(corpo)\n+    }\n+  )\n+  return { status: res.status, body: await res.json() }\n+}\n+\n+describe('Auditoria M3 — lacunas do parecer 2026-09-17', () => {\n+  let server, port\n+\n+  before(() => {\n+    process.env.MODO_TESTE = '1'\n+  })\n+\n+  before(async () => {\n+    ;({ server, port } = await listen(createApp()))\n+  })\n+\n+  after(() => close(server))\n+\n+  it('inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port)\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    const inscricaoDeCarla = await inscreve(port, atividadeId, 'p-carla')\n+    assert.equal(inscricaoDeCarla.status, 'confirmada')\n+    await relogio(port, '2026-10-19T10:05:00-03:00')\n+    const cancelada = await fetch(\n+      `http://localhost:${port}/inscricoes/${inscricaoDeCarla.id}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'p-carla' } }\n+    )\n+    assert.equal(cancelada.status, 200)\n+    assert.equal((await cancelada.json()).status, 'cancelada')\n+    await relogio(port, '2026-10-19T19:03:45-03:00')\n+    const codigo = await obtemCodigo(port, encontroId)\n+    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n+    assert.equal(status, 403)\n+    assert.equal(body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof body.mensagem, 'string')\n+  })\n+\n+  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n+  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n+  // janela abre em início − 15 min (spec M2).\n+  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n+    assert.equal(deDiego.status, 'confirmada')\n+    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n+    assert.equal(deCarla.status, 'em_espera')\n+    await relogio(port, '2026-10-19T18:00:00-03:00')\n+    const cancelada = await fetch(\n+      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n+    )\n+    assert.equal(cancelada.status, 200)\n+    const convocada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(convocada.status, 'convocada')\n+    assert.equal(\n+      Date.parse(convocada.convocadaAte),\n+      Date.parse('2026-10-19T18:30:00-03:00')\n+    )\n+    await relogio(port, '2026-10-19T19:03:45-03:00')\n+    const expirada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(expirada.status, 'expirada')\n+    const codigo = await obtemCodigo(port, encontroId)\n+    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n+    assert.equal(status, 403)\n+    assert.equal(body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof body.mensagem, 'string')\n+  })\n+\n+  it('atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port)\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    await inscreve(port, atividadeId, 'p-carla')\n+    await inscreve(port, atividadeId, 'p-diego')\n+    await relogio(port, '2026-10-19T18:47:00-03:00')\n+    const primeira = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(primeira.status, 201)\n+    await relogio(port, '2026-10-19T18:50:00-03:00')\n+    const cancelamento = await fetch(\n+      `http://localhost:${port}/atividades/${atividadeId}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'org-ana' } }\n+    )\n+    assert.equal(cancelamento.status, 200)\n+    await relogio(port, '2026-10-19T18:55:00-03:00')\n+    const repetida = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(repetida.status, 200)\n+    assert.equal(repetida.body.id, primeira.body.id)\n+    const semPresenca = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-carla', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(semPresenca.status, 403)\n+    assert.equal(semPresenca.body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof semPresenca.body.mensagem, 'string')\n+  })\n+})\n\\ No newline at end of file\n",
+       "additions": 214,
+       "deletions": 0,
+       "status": "added"
+      }
+     ]
+    },
+    "id": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "type": "text",
+     "text": "Dentro da pasta api/ Use a skill tdd. Resolva os dois achados do parecer ../auditorias/M3-2026-09-17.md sobre ../specs/M3-presenca.md, em test/presenca-auditoria.test.js. Um teste por vez: escreva, mostre falhando ou explique por que já nasce verde (o código já cobre, falta só a prova), e não altere spec, código nem testes existentes a menos que um teste novo fique vermelho.\n\nCenário base: palestra no auditorio, encontro 2026-10-19T19:00:00-03:00 a 22:00:00-03:00, criada por org-ana; inscrições feitas com o relógio em 10:00; org-ana obtém o código em GET /encontros/:id/codigo dentro da janela.\n\nAchado 1 (R8):\n- Inscrição cancelada: p-carla se inscreve às 10:00, cancela a própria inscrição às 10:05 (POST /inscricoes/:id/cancelamento); às 19:03:45 envia POST /encontros/:id/presencas com código válido → 403 NAO_INSCRITO.\n- Inscrição expirada: atividade com vagas 1; p-diego se inscreve (confirmada), p-carla se inscreve (em_espera); às 18:00 p-diego cancela a inscrição → p-carla fica convocada com prazo até 18:30 (fechamento das inscrições); às 19:03:45 confira em GET /inscricoes/:id que p-carla está expirada e envie POST /encontros/:id/presencas com código válido → 403 NAO_INSCRITO.\n- No nome ou comentário do teste, registre: convocada nunca coexiste com a janela de presença, porque a convocação vence no máximo no fechamento (início − 30 min) e a janela abre em início − 15 min (spec M2); por isso a prova é com expirada.\n\nAchado 2 (R18, manual):\n- p-carla e p-diego confirmados. Às 18:47 org-ana registra manual para p-diego (justificativa válida) → 201. Às 18:50 org-ana cancela a atividade (POST /atividades/:id/cancelamento). Às 18:55: manual para p-diego → 200 com a mesma presença; manual para p-carla → 403 NAO_INSCRITO.\n\nAo final rode npm test e relate o número real. Faça o commit com a mensagem: M3-R8/R18: provas que faltavam na auditoria — inscrição cancelada e expirada, manual em atividade cancelada ",
+     "id": "prt_0b15393280025g8728ZSk0evWF",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1539328001cc2OjCkoLEg5wV"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 12561,
+     "input": 10615,
+     "output": 154,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 1792
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681439535,
+     "completed": 1789681442766
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b153932f001y54W2FUD9WyC44",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-start",
+     "id": "prt_0b1539b2e001R4vpHu8wqCtu8E",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153932f001y54W2FUD9WyC44"
+    },
+    {
+     "type": "reasoning",
+     "text": "Let me start by loading the tdd skill and reading the relevant files.",
+     "time": {
+      "start": 1789681441584,
+      "end": 1789681441636
+     },
+     "id": "prt_0b1539b300018N0xnsVS3B5H3E",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153932f001y54W2FUD9WyC44"
+    },
+    {
+     "type": "text",
+     "text": "\n\n",
+     "time": {
+      "start": 1789681441638,
+      "end": 1789681442171
+     },
+     "id": "prt_0b1539b66001EJqPWm5ozGiWfV",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153932f001y54W2FUD9WyC44"
+    },
+    {
+     "type": "tool",
+     "tool": "skill",
+     "callID": "call_81f3b5d07a4e462699b896a9",
+     "state": {
+      "status": "completed",
+      "input": {
+       "name": "tdd"
+      },
+      "output": "<skill_content name=\"tdd\">\n# Skill: tdd\n\n# Teste primeiro, uma fatia por vez\r\n\r\nO ciclo é: **um teste que falha → o código mínimo que faz ele passar → a próxima fatia.**\r\nNada de escrever a suíte inteira e depois o código inteiro.\r\n\r\nVocê precisa de uma spec com regras numeradas. Sem ela, pare: você vai acabar testando o\r\nque você mesmo inventou. Sem contrato, verde não significa nada.\r\n\r\n## Onde o teste mora\r\n\r\nTeste verifica **comportamento pela interface pública**, nunca implementação. Aqui a\r\ninterface é HTTP: a API sobe com Express e o teste fala por `fetch`. Não importe\r\nserviço nem repositório no teste — se importar, o teste quebra quando você refatorar\r\nsem que o comportamento tenha mudado.\r\n\r\nPadrão do projeto: `node --test`, `node:assert/strict`, um arquivo de teste por\r\ncenário em `api/test/`. Sem framework, sem dependência, sem mock.\r\n\r\n## O ciclo, por fatia\r\n\r\nPara cada fatia da spec, nesta ordem:\r\n\r\n1. Escreva **um** teste que prova **um** critério de aceite. O nome do teste é a regra\r\n   em português: `it('recusa inscrição quando não há vagas')`.\r\n2. Rode. **Ele tem que falhar.** Teste que passa antes do código existir não está\r\n   testando nada — descubra por quê antes de seguir.\r\n3. Escreva o mínimo de código que faz ele passar. Nada de já implementar a regra\r\n   seguinte \"que eu vou precisar mesmo\".\r\n4. Rode a suíte inteira. Verde? Próxima fatia.\r\n\r\nSó passe para a fatia seguinte com a suíte inteira verde.\r\n\r\n## A regra que não se quebra\r\n\r\n**Quando o teste falha, o suspeito é o código.**\r\n\r\nSe você mudar um teste para ele passar, você trocou o contrato pela sua implementação e\r\no verde virou enfeite. Só se altera um teste quando a **spec** mudou — e aí você diz, em\r\nvoz alta, qual regra da spec mudou e por quê.\r\n\r\nVale para o valor esperado, para o status HTTP e para o cenário. Trocar\r\n`assert.equal(vagasRestantes, 10)` por `assert.equal(vagasRestantes, 8)` porque o código\r\ndeu 8 é a forma mais comum de mentir sozinho.\r\n\r\n## Três testes que não valem nada\r\n\r\n- **Acoplado à implementação** — chama serviço ou repositório direto, ou confere o dado\r\n  espiando o banco em vez de pedir pela API. Quebra em refatoração, não em regressão.\r\n- **Tautológico** — o esperado é calculado do mesmo jeito que o código calcula\r\n  (`assert.equal(ocupadas, inscritos + 1)`). Passa por construção, nunca discorda do código.\r\n  O valor esperado vem da spec, escrito na mão: `assert.equal(ocupadas, 13)`.\r\n- **Frouxo** — confere só o status e ignora o corpo. `201` com o prazo errado passa.\r\n\r\n## Fechamento\r\n\r\nTerminada a última fatia, rode a suíte inteira uma vez e relate o número real que\r\napareceu na saída. Não estime, não arredonde, não repita um número de outra rodada.\n\nBase directory for this skill: C:\\semana-academica\\.opencode\\skills\\tdd\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+      "metadata": {
+       "name": "tdd",
+       "dir": "C:\\semana-academica\\.opencode\\skills\\tdd",
+       "truncated": false
+      },
+      "title": "Loaded skill: tdd",
+      "time": {
+       "start": 1789681441720,
+       "end": 1789681441759
+      }
+     },
+     "id": "prt_0b1539b9b001AHVt9Yqk6KztI6",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153932f001y54W2FUD9WyC44"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_5abb4ce1ce9f41029b9d9396",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\auditorias\\M3-2026-09-17.md"
+      },
+      "output": "[781 caracteres omitidos]",
+      "title": "auditorias\\M3-2026-09-17.md",
+      "time": {
+       "start": 1789681441874,
+       "end": 1789681441892
+      }
+     },
+     "id": "prt_0b1539be2001N2xXYSosZ3KDHX",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153932f001y54W2FUD9WyC44"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_1dde8efb4377486dbb89e3c5",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\specs\\M3-presenca.md"
+      },
+      "output": "[15599 caracteres omitidos]",
+      "title": "specs\\M3-presenca.md",
+      "time": {
+       "start": 1789681441939,
+       "end": 1789681441947
+      }
+     },
+     "id": "prt_0b1539c54001XyRYU7nlpWApBv",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153932f001y54W2FUD9WyC44"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-finish",
+     "tokens": {
+      "total": 12561,
+      "input": 10615,
+      "output": 154,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 1792
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1539e98001rj42wFRiOaDrpx",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153932f001y54W2FUD9WyC44"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 19907,
+     "input": 7488,
+     "output": 131,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 12288
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681442771,
+     "completed": 1789681445044
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b1539fd3001syG7WR9DFsijqi",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-start",
+     "id": "prt_0b153a478001DqunQZdGLTefps",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1539fd3001syG7WR9DFsijqi"
+    },
+    {
+     "type": "reasoning",
+     "text": "Let me explore the existing test files to understand the patterns and the code. Let me look at the test directory and the existing presenca tests.",
+     "time": {
+      "start": 1789681443962,
+      "end": 1789681444137
+     },
+     "id": "prt_0b153a47a0019ShK4UywZhLEB1",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1539fd3001syG7WR9DFsijqi"
+    },
+    {
+     "type": "text",
+     "text": "\n\n",
+     "time": {
+      "start": 1789681444139,
+      "end": 1789681444440
+     },
+     "id": "prt_0b153a52b001b5JQEKC4vKJ7F7",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1539fd3001syG7WR9DFsijqi"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_456cf20a07554b02b33821b9",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test"
+      },
+      "output": "[515 caracteres omitidos]",
+      "title": "api\\test",
+      "time": {
+       "start": 1789681444252,
+       "end": 1789681444258
+      }
+     },
+     "id": "prt_0b153a546001vo0yvYZjGz0uDA",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1539fd3001syG7WR9DFsijqi"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_464d58962f5f416e9239c343",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\presenca-f2.test.js"
+      },
+      "output": "[22802 caracteres omitidos]",
+      "title": "api\\test\\presenca-f2.test.js",
+      "time": {
+       "start": 1789681444359,
+       "end": 1789681444376
+      }
+     },
+     "id": "prt_0b153a5ce001XWv3gby0roP7Io",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1539fd3001syG7WR9DFsijqi"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-finish",
+     "tokens": {
+      "total": 19907,
+      "input": 7488,
+      "output": 131,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 12288
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b153a76b001SOEq8xCnCJjWnj",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1539fd3001syG7WR9DFsijqi"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 28009,
+     "input": 8141,
+     "output": 156,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 19712
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681445047,
+     "completed": 1789681447826
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b153a8b7001pfmOfiSbGV1SvN",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-start",
+     "id": "prt_0b153ae95001BH51JuTM9smBgd",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153a8b7001pfmOfiSbGV1SvN"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now let me read the presenca-f4.test.js file and the relevant code, plus the M2 spec for statuses. Let me also look at how cancellation works and the inscricoes tests to understand status transitions.",
+     "time": {
+      "start": 1789681446551,
+      "end": 1789681446662
+     },
+     "id": "prt_0b153ae97001sYFOBFc9LXjB5L",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153a8b7001pfmOfiSbGV1SvN"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_5f02717dc6a84541a7d790e7",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\presenca-f4.test.js"
+      },
+      "output": "[20323 caracteres omitidos]",
+      "title": "api\\test\\presenca-f4.test.js",
+      "time": {
+       "start": 1789681446815,
+       "end": 1789681446825
+      }
+     },
+     "id": "prt_0b153af08001WQeHSAYdW6FkuQ",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153a8b7001pfmOfiSbGV1SvN"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_9510a6b95d684a23a83ce78f",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\inscricoes-f5.test.js"
+      },
+      "output": "[13100 caracteres omitidos]",
+      "title": "api\\test\\inscricoes-f5.test.js",
+      "time": {
+       "start": 1789681446977,
+       "end": 1789681447101
+      }
+     },
+     "id": "prt_0b153afa1001V9Okd2E7hvNxEO",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153a8b7001pfmOfiSbGV1SvN"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-finish",
+     "tokens": {
+      "total": 28009,
+      "input": 8141,
+      "output": 156,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 19712
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b153b283001wKL79O3NBQXiYs",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153a8b7001pfmOfiSbGV1SvN"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 39831,
+     "input": 11717,
+     "output": 210,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 27904
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681447829,
+     "completed": 1789681450459
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b153b395001mlgnPevVpO2v3M",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-start",
+     "id": "prt_0b153b8da001Cb8vKSylBMlSLM",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153b395001mlgnPevVpO2v3M"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now let me look at the M2 spec for the inscription statuses, especially around convocada/expiry the \"convocadaAte\" deadline and the \"fechamento das inscrições\". Let me check the spec M2-inscricoes.md and the src code for inscricoes, presencas, and how the cancelamento works.\n\nLet me read the M2 spec, src/presencas.js, src/inscricoes.js, and the src/index.js.",
+     "time": {
+      "start": 1789681449180,
+      "end": 1789681449647
+     },
+     "id": "prt_0b153b8dc001LWSM36aM8nlBpl",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153b395001mlgnPevVpO2v3M"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_7adf1aae3466489b82cfc493",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\specs\\M2-inscricoes.md"
+      },
+      "output": "[20233 caracteres omitidos]",
+      "title": "specs\\M2-inscricoes.md",
+      "time": {
+       "start": 1789681449775,
+       "end": 1789681449784
+      }
+     },
+     "id": "prt_0b153bab2001X1bbMpjeYFAUyu",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153b395001mlgnPevVpO2v3M"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_1b27e44d9bcf41c2ad577cc9",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\presencas.js"
+      },
+      "output": "[7224 caracteres omitidos]",
+      "title": "api\\src\\presencas.js",
+      "time": {
+       "start": 1789681449864,
+       "end": 1789681449880
+      }
+     },
+     "id": "prt_0b153bb31001Ztva8pYtq65V45",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153b395001mlgnPevVpO2v3M"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-finish",
+     "tokens": {
+      "total": 39831,
+      "input": 11717,
+      "output": 210,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 27904
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b153bcc4001eAwmoDB11XiKyn",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153b395001mlgnPevVpO2v3M"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 50168,
+     "input": 10251,
+     "output": 237,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 39680
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681450463,
+     "completed": 1789681453921
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b153bddf001F6eOhWIXoPNO93",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-start",
+     "id": "prt_0b153c29b001qO731TdtpyvN5g",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153bddf001F6eOhWIXoPNO93"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now I understand the code. The status check uses `listarInscricoes` and checks for `confirmada`. Since the code already checks for `confirmada` status, the cancellation and expiry cases are likely already covered by the code — the tests should just prove it. But I need to check the inscricoes.js to understand how listarInscricoes works, particularly for the organization profile, since the expiry is computed lazily maybe.\n\nLet me look at inscricoes.js and index.js to understand how the status is computed (convocada/expiração), particularly around whether convocadaAte is computed lazily.",
+     "time": {
+      "start": 1789681451679,
+      "end": 1789681452673
+     },
+     "id": "prt_0b153c29f0016bXIAzdV42us38",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153bddf001F6eOhWIXoPNO93"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_ecd13df5ce2948ebaae679c2",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\inscricoes.js"
+      },
+      "output": "[11054 caracteres omitidos]",
+      "title": "api\\src\\inscricoes.js",
+      "time": {
+       "start": 1789681452990,
+       "end": 1789681453102
+      }
+     },
+     "id": "prt_0b153c684001YWifsxB4xR5og4",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153bddf001F6eOhWIXoPNO93"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_185fd271534f4434bb030fb2",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\index.js"
+      },
+      "output": "[13026 caracteres omitidos]",
+      "title": "api\\src\\index.js",
+      "time": {
+       "start": 1789681453088,
+       "end": 1789681453199
+      }
+     },
+     "id": "prt_0b153c7c0001M3L4ixaqxB7TG1",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153bddf001F6eOhWIXoPNO93"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-finish",
+     "tokens": {
+      "total": 50168,
+      "input": 10251,
+      "output": 237,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 39680
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b153ca50001kB2NzDYGBz2TyC",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153bddf001F6eOhWIXoPNO93"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 63276,
+     "input": 8109,
+     "output": 5247,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 49920
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681453926,
+     "completed": 1789681477255
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b153cb66001AF2Tx4wpSvE0kO",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-start",
+     "id": "prt_0b153d064001mwbX06qShN6AV5",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153cb66001AF2Tx4wpSvE0kO"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now I understand the code well. Let me analyze the two findings.\n\n**Finding 1 (R8):** \n- Canceled inscription: p-carla registers at 10:00, cancels own inscription at 10:05 → at 19:03:45 sends POST /encontros/:id/presencas with valid code → 403 NAO_INSCRITO.\n- Expired inscription: activity with vagas 1; p-diego registers (confirmada), p-carla registers (em_espera); at 18:00 p-diego cancels → p-carla becomes convocada with deadline until 18:30 (fechamento das inscrições, inicio 19:00 − 30min = 18:30); at 19:03:45 check in GET /inscricoes/:id that p-carla is expirada and send POST /encontros/:id/presencas with valid code → 403 NAO_INSCRITO.\n- Note in the test name/comment: convocada never coexists with presence window, because convocação expires at most at fechamento (inicio − 30 min) and window opens at inicio − 15 min (spec M2); therefore the proof is with expirada.\n\nWait — let me think about the scenario for expired. The base scenario said: \"inscrições feitas com o relógio em 10:00\". For the expired one:\n- Activity vagas 1.\n- At 10:00 p-diego registers (confirmada), p-carla registers (em_espera).\n- At 18:00 p-diego cancels his registration → vaga liberada → p-carla is convocada. convocadaAte = min(now + 2h, fechamento). fechamento = inicio (19:00) − 30min = 18:30. So convocadaAte = min(20:00, 18:30) = 18:30.\n- At 19:03:45: p-carla's convocadaAte has passed (18:30) → she's expirada. Check GET /inscricoes/:id shows expirada. Then POST /encontros/:id/presencas with valid code → 403 NAO_INSCRITO.\n\nWait, but the cancellation of p-diego at 18:00 — cancelamento route is POST /inscricoes/:id/cancelamento and can be done before the activity starts. At 18:00, activity starts at 19:00, so it's before. OK. p-diego was confirmada, so canceling liberates vaga → processarEsperaDa promotes p-carla. Good. Actually wait — at 18:00, are inscriptions closed? Inscriptions close at 18:30. At 18:00 they're not closed, but that doesn't matter for the cancellation logic.\n\nHmm, but wait: cancellation at 18:00. After promotion, convocadaAte for p-carla = min(18:00 + 2h = 20:00, 18:30) = 18:30. Then at 19:03:45, when we call listarInscricoes via GET /inscricoes/:id or via registrarPresenca → processarEsperaDa is called and expira convocada. So p-carla becomes expirada. Good.\n\nBut hold on: does the registrarPresenca path call listarInscricoes with the participante's profile? Yes: `listarInscricoes(participanteId, 'participante', { atividadeId: atividade.id })`. That calls processarEsperaDa which expires p-carla. So status becomes expirada → not confirmada → NAO_INSCRITO. \n\nThe scenario says \"às 19:03:45 confira em GET /inscricoes/:id que p-carla está expirada e envie POST /encontros/:id/presencas\". So we check with GET /inscricoes/:id first (which also processes), then send presenca.\n\nNow, will these tests pass with current code? Let's verify:\n\nTest 1 (cancelada): p-carla registers at 10:00 (confirmada). Cancels at 10:05 (her own) → status cancelada. At 19:03:45 obtains code, sends POST /encontros/:id/presencas → registrarPresenca checks existing presenca (none), then listarInscricoes('p-carla', 'participante', {atividadeId}) → inscrições filtered by participantId. p-carla's inscription is cancelada → not confirmada → NAO_INSCRITO. 403. ✓ So the test should pass with existing code — it's a test that \"nasce verde\" because the code already covers it; we're just adding the missing proof.\n\nActually wait — the skill says a test that passes before code exists isn't testing anything; we should discover why before continuing. In this task, the user explicitly said: \"escreva, mostre falhando ou explique por que já nasce verde (o código já cobre, falta só a prova)\". So for these, they likely already pass — the R8 status check for `confirmada` only already covers cancelada/expirada because they're not `confirmada`. The existing code only checks `i.status === 'confirmada'`, so em_espera, convocada, cancelada, expirada all fall to NAO_INSCRITO. So these new tests will be green immediately. That's the explanation: the code already covers it (only `confirmada` passes), we're adding the missing proof for the audit.\n\nTest 2 (expirada): need GET /inscricoes/:id to confirm status expirada. And that's part of the test body.\n\nNow let me trace more carefully whether p-carla gets expirada at 19:03:45. She was convocada at 18:00 with convocadaAte 18:30. At 18:30 exactly the status transitions only when something processes the waitlist (lazy). At 19:03:45, GET /inscricoes/:id calls buscarInscricao → processarEsperaDa(atividadeId). vencida = convocada with convocadaAte < agora. 18:30 < 19:03:45 → yes. So expirada. ✓\n\nBut wait — is there a subtlety: after expirada, does another promotion happen? p-diego also... no, p-diego canceled. No one else in espera. OK.\n\nThen send POST presencas: registrarPresenca → listarInscricoes → processarEsperaDa again (no-op), p-carla status expirada → NAO_INSCRITO → 403. ✓\n\nBoth tests green.\n\n**Finding 2 (R18 manual):**\n- p-carla and p-diego confirmados. At 18:47 org-ana registers manual for p-diego (valid justificativa) → 201. At 18:50 org-ana cancels activity (POST /atividades/:id/cancelamento). At 18:55: manual for p-diego → 200 with same presença; manual for p-carla → 403 NAO_INSCRITO.\n\nLet me trace through the code:\n- At 18:47, manual for p-diego: registrarPresencaManual → no existing presença → inscricoes = listarInscricoes('org-ana', 'organizacao', {atividadeId}). org-ana sees all. p-diego confirmada → OK → janela manual: 18:47 within [18:45, 00:00] → OK. manuais count = 0, confirmadas = 2, limite = ceil(0.2) = 1. 0 < 1 → OK. Creates presença. 201. ✓\n- At 18:50, cancel activity → cancelarAtividade. Let me check atividades.js's cancelarAtividade to see whether it calls cancelarInscricoesDaAtividade. Probably yes. Then all inscrições become cancelada.\n- At 18:55, manual for p-diego: registrarPresencaManual → check existing presença: p-diego has presença → returns existing with jaExistia → 200 with same presença. ✓ (Because presença existing is checked before NAO_INSCRITO — R17 order: corpo → justificativa → presença existente (200) → não inscrito → ... ) Wait, the order in the code: justificativa first, then existing presença, then inscrição check. Yes: lines 88-108. So for p-diego, exists → 200. ✓\n- manual for p-carla at 18:55: no presença for p-carla, inscricoes: p-carla status cancelada → not confirmada → NAO_INSCRITO → 403. ✓ Also, janela manual: 18:55 is within window. But inscrição check comes before janela (R17 order: justificativa → existente → NAO_INSCRITO → FORA_DA_JANELA → limite). So NAO_INSCRITO regardless. ✓\n\nWait, the justificativa check: for p-diego repeat at 18:55, the justificativa must be valid (≥10 chars) because R17 order says justificativa comes first. The user scenario says \"manual para p-diego → 200 com a mesma presença\". We must send a valid justificativa. ✓\n\nAll three assertions green with existing code.\n\nNow, the two tests need to be written in `api/test/presenca-auditoria.test.js`. One test per finding? The user says \"Um teste por vez: escreva, mostre falhando ou explique por que já nasce verde\". There are two findings but Finding 1 has two sub-scenarios (inscrição cancelada and inscrição expirada). The auditoria asks for a test for each lacuna. Let me re-read.\n\nThe user's request:\n- \"Resolva os dois achados do parecer\" — two findings (achado 1 = R8, achado 2 = R18 manual).\n- Under Achado 1 (R8): two sub-scenarios: inscrição cancelada, inscrição expirada.\n- Under Achado 2 (R18, manual): one scenario.\n\nSo we write tests. \"Um teste por vez: escreva, mostre falhando ou explique por que já nasce verde\". I'll write each test, run it, and explain. Given the code already covers these, they should be green from the start. I need to verify by running.\n\nLet me create a todo list and write the test file. I'll write all tests in one file (presenca-auditoria.test.js), but run each test one at a time. Actually \"um teste por vez\" — I could use `--test-name-pattern` to run individual tests. Let me write the file with all tests, then run with name pattern for each.\n\nActually, better to be faithful to \"write one, run it, explain\". I could write the file incrementally. But editing repeatedly is fine. Let me think about the most pragmatic approach: write the full file (3 tests), then run each individually with `--test-name-pattern` to show each passes, explaining why each nasce verde. But the tdd skill and the user instruction \"Um teste por vez: escreva, mostre falhando ou explique por que já nasce verde\" suggests we write one test at a time and run. I'll do it test by test: write test 1, run only that test (name pattern), explain; then append test 2, run, explain; append test 3, run, explain; then run full npm test.\n\nLet me check the atividades.js cancelarAtividade to confirm the cancelamento route exists and works (it does based on index.js). Let me also verify there's a `situacao` on atividade. Yes, `get /encontros/:id/codigo` checks `atividade.situacao === 'cancelada'`.\n\nLet me check atividades.js briefly for cancelarAtividade behavior.\n\nActually the detail doesn't matter much; the tests are green as designed. But let me confirm cancelarAtividade calls cancelarInscricoesDaAtividade. Let me read atividades.js.\n\nLet me also double check the naming for the disparo \"inscrições feitas com o relógio em 10:00\" — base scenario. For the cancelada test: registers at 10:00, cancels at 10:05. For expirada test: registers at 10:00, then 18:00 cancel by p-diego. So relogio at 10:00 for inscrições, then advance.\n\nAlso the note to record: \"convocada nunca coexiste com a janela de presença, porque a convocação vence no máximo no fechamento (início − 30 min) e a janela abre em início − 15 min (spec M2); por isso a prova é com expirada.\" — This should be in the test name or comment. I'll put a comment in the test and mention in the test name.\n\nNow let me write. I'll create the file with the standard helpers copied from the other test files.\n\nFor test 1 (R8 cancelada):\n```js\nit('inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n  await reset(port)\n  const { atividadeId, encontroId } = await criaPalestra(port)\n  await relogio(port, '2026-10-19T10:00:00-03:00')\n  const inscricaoDeCarla = await inscreve(port, atividadeId, 'p-carla')\n  assert.equal(inscricaoDeCarla.status, 'confirmada')\n  await relogio(port, '2026-10-19T10:05:00-03:00')\n  const cancelada = await fetch(\n    `http://localhost:${port}/inscricoes/${inscricaoDeCarla.id}/cancelamento`,\n    { method: 'POST', headers: { 'X-Usuario': 'p-carla' } }\n  )\n  assert.equal(cancelada.status, 200)\n  assert.equal((await cancelada.json()).status, 'cancelada')\n  await relogio(port, '2026-10-19T19:03:45-03:00')\n  const codigo = await obtemCodigo(port, encontroId)\n  const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n  assert.equal(status, 403)\n  assert.equal(body.erro, 'NAO_INSCRITO')\n  assert.equal(typeof body.mensagem, 'string')\n})\n```\n\nWait: `inscreve` returns `res.json()`. My helper returns res.json(). Good.\n\nFor test 2 (R8 expirada):\n```js\nit('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) — a prova é com expirada porque convocada vence no máximo no fechamento (início − 30 min), antes da janela abrir (início − 15 min)', async () => {\n  await reset(port)\n  const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n  await relogio(port, '2026-10-19T10:00:00-03:00')\n  await inscreve(port, atividadeId, 'p-diego')\n  const deCarla = await inscreve(port, atividadeId, 'p-carla')\n  assert.equal(deCarla.status, 'em_espera')\n  await relogio(port, '2026-10-19T18:00:00-03:00')\n  const listaDeDiego = await (\n    await fetch(`http://localhost:${port}/inscricoes`, { headers: { 'X-Usuario': 'p-diego' } })\n  ).json()\n  const inscricaoDeDiego = listaDeDiego.find(i => i.atividadeId === atividadeId)\n  const cancelada = await fetch(\n    `http://localhost:${port}/inscricoes/${inscricaoDeDiego.id}/cancelamento`,\n    { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n  )\n  assert.equal(cancelada.status, 200)\n  // p-carla convocada com prazo no fechamento das inscrições (18:30)\n  const convocada = await (\n    await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, { headers: { 'X-Usuario': 'p-carla' } })\n  ).json()\n  assert.equal(convocada.status, 'convocada')\n  assert.equal(Date.parse(convocada.convocadaAte), Date.parse('2026-10-19T18:30:00-03:00'))\n  await relogio(port, '2026-10-19T19:03:45-03:00')\n  const agora = await (\n    await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, { headers: { 'X-Usuario': 'p-carla' } })\n  ).json()\n  assert.equal(agora.status, 'expirada')\n  const codigo = await obtemCodigo(port, encontroId)\n  const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n  assert.equal(status, 403)\n  assert.equal(body.erro, 'NAO_INSCRITO')\n  assert.equal(typeof body.mensagem, 'string')\n})\n```\n\nWait — GET /inscricoes/:id: any user can read it, but if called with head p-carla... the get requires identification. `deCarla.id` is the inscrição of p-carla. Reading with X-Usuario: 'p-carla' is fine. Actually the convocada check — could simplify: after cancel, GET /inscricoes/:id (deCarla.id) with X-Usuario p-carla → status convocada, convocadaAte 18:30. Good. This confirms the convocada state and the deadline. Then relogio 19:03:45, GET again → expirada.\n\nNote: when p-diego cancels at 18:00, the cancelamento route → cancelarInscricao → processarEsperaDa promotes p-carla. But when we GET via /inscricoes (list for p-diego) — hmm, I need p-diego's inscription id. I can get it by listarInscricoes for p-diego via GET /inscricoes with X-Usuario p-diego. Since inscrições were made at 10:00. Actually `inscreve` returns the inscription object directly for p-diego, so I already have `deDiego.id`. \n\n```js\nconst deDiego = await inscreve(port, atividadeId, 'p-diego')\nassert.equal(deDiego.status, 'confirmada')\nconst deCarla = await inscreve(port, atividadeId, 'p-carla')\nassert.equal(deCarla.status, 'em_espera')\n...\nconst cancelada = await fetch(`.../inscricoes/${deDiego.id}/cancelamento`, ...)\n```\n\nGood, simpler.\n\nFor test 3 (R18 manual):\n```js\nit('atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18)', async () => {\n  await reset(port)\n  const { atividadeId, encontroId } = await criaPalestra(port)\n  await relogio(port, '2026-10-19T10:00:00-03:00')\n  await inscreve(port, atividadeId, 'p-carla')\n  await inscreve(port, atividadeId, 'p-diego')\n  await relogio(port, '2026-10-19T18:47:00-03:00')\n  const primeira = await enviaManual(\n    port, encontroId,\n    { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n    'org-ana'\n  )\n  assert.equal(primeira.status, 201)\n  await relogio(port, '2026-10-19T18:50:00-03:00')\n  const cancelamento = await fetch(\n    `http://localhost:${port}/atividades/${atividadeId}/cancelamento`,\n    { method: 'POST', headers: { 'X-Usuario': 'org-ana' } }\n  )\n  assert.equal(cancelamento.status, 200)\n  await relogio(port, '2026-10-19T18:55:00-03:00')\n  const repetida = await enviaManual(\n    port, encontroId,\n    { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n    'org-ana'\n  )\n  assert.equal(repetida.status, 200)\n  assert.equal(repetida.body.id, primeira.body.id)\n  const semPresenca = await enviaManual(\n    port, encontroId,\n    { participanteId: 'p-carla', justificativa: 'justificativa valida' },\n    'org-ana'\n  )\n  assert.equal(semPresenca.status, 403)\n  assert.equal(semPresenca.body.erro, 'NAO_INSCRITO')\n  assert.equal(typeof semPresenca.body.mensagem, 'string')\n})\n```\n\njustificativa must be ≥ 10 chars. 'justificativa valida' = 19 chars. Fine.\n\nNow, note the user wants \"Um teste por vez\". Let me write the file with just the first test, run it, explain; then add second, run; then add third, run; then full npm test.\n\nActually, since each will be green from the start (code already covers), I'll explain that for each. But wait — I should double check test 2's convocadaAte assert. fechamento = 18:30. Base = 18:00 (cancel instante). min(18:00+2h=20:00, 18:30) = 18:30. ✓\n\nLet me also double check the manual test at 18:47: janela manual opens at inicio−15min = 18:45. 18:47 is fine. limite = ceil(10% of 2) = ceil(0.2) = 1. 0 < 1 → OK. 201. ✓\n\nAt 18:55, manual for p-carla: presença existente? No. justificativa valid. Then inscrições: listarInscricoes('org-ana', 'organizacao') → all. p-carla status cancelada → NAO_INSCRITO 403. Also note cancelarAtividade sets `situacao = 'cancelada'`. But registrarPresencaManual doesn't check atividade cancelada at all — it relies on inscrições being canceled. That's exactly R18. ✓\n\nLet me check atividades.js cancelarAtividade to confirm it calls cancelarInscricoesDaAtividade.",
+     "time": {
+      "start": 1789681455216,
+      "end": 1789681475825
+     },
+     "id": "prt_0b153d070001zC7hvOcYriEl6G",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153cb66001AF2Tx4wpSvE0kO"
+    },
+    {
+     "type": "text",
+     "text": "\n\n",
+     "time": {
+      "start": 1789681475830,
+      "end": 1789681476680
+     },
+     "id": "prt_0b15420f6001YfXPmKiMNfLKCz",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153cb66001AF2Tx4wpSvE0kO"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_423a1af2a6084f0b8d767e6a",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\atividades.js"
+      },
+      "output": "[8299 caracteres omitidos]",
+      "title": "api\\src\\atividades.js",
+      "time": {
+       "start": 1789681476603,
+       "end": 1789681476612
+      }
+     },
+     "id": "prt_0b15420fa001XV42XYQBVYxMAf",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153cb66001AF2Tx4wpSvE0kO"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-finish",
+     "tokens": {
+      "total": 63276,
+      "input": 8109,
+      "output": 5247,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 49920
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1542568001kOLOu2v7qPfw80",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b153cb66001AF2Tx4wpSvE0kO"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 66529,
+     "input": 3203,
+     "output": 350,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 62976
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681477260,
+     "completed": 1789681480632
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b154268c001qlEtmCHx0X8nIb",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-start",
+     "id": "prt_0b1542ce1001VryY0PRol7FasZ",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154268c001qlEtmCHx0X8nIb"
+    },
+    {
+     "type": "reasoning",
+     "text": "Cancelamento route: `POST /atividades/:id/cancelamento`. At 18:50, situação is prevista (inicio 19:00, not started) so cancel works → sets cancelada, cancels inscrições. Good.\n\nNow, plan confirmed. All tests should pass with existing code. Let me create the todo list and write the test file.\n\nI'll write test 1 first, run only it, explain. Then append test 2, run, explain. Then append test 3, run, explain. Then full npm test.\n\nLet me set up todos.",
+     "time": {
+      "start": 1789681478885,
+      "end": 1789681479328
+     },
+     "id": "prt_0b1542ce50013BLglT7csFrMpC",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154268c001qlEtmCHx0X8nIb"
+    },
+    {
+     "type": "text",
+     "text": "\n\n",
+     "time": {
+      "start": 1789681479330,
+      "end": 1789681480032
+     },
+     "id": "prt_0b1542ea2001Eg6tvbLLargOLU",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154268c001qlEtmCHx0X8nIb"
+    },
+    {
+     "type": "tool",
+     "tool": "todowrite",
+     "callID": "call_397c5ae1041547e8a89ffde7",
+     "state": {
+      "status": "completed",
+      "input": {
+       "todos": [
+        {
+         "content": "Teste 1 (R8): inscrição cancelada → POST presencas 403 NAO_INSCRITO",
+         "status": "in_progress",
+         "priority": "high"
+        },
+        {
+         "content": "Teste 2 (R8): inscrição expirada → POST presencas 403 NAO_INSCRITO",
+         "status": "pending",
+         "priority": "high"
+        },
+        {
+         "content": "Teste 3 (R18): manual em atividade cancelada — quem tem presença 200, quem não tem 403",
+         "status": "pending",
+         "priority": "high"
+        },
+        {
+         "content": "Rodar npm test completo e relatar número real",
+         "status": "pending",
+         "priority": "high"
+        },
+        {
+         "content": "Commit com a mensagem pedida",
+         "status": "pending",
+         "priority": "high"
+        }
+       ]
+      },
+      "output": "[\n  {\n    \"content\": \"Teste 1 (R8): inscrição cancelada → POST presencas 403 NAO_INSCRITO\",\n    \"status\": \"in_progress\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Teste 2 (R8): inscrição expirada → POST presencas 403 NAO_INSCRITO\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Teste 3 (R18): manual em atividade cancelada — quem tem presença 200, quem não tem 403\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Rodar npm test completo e relatar número real\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Commit com a mensagem pedida\",\n    \"status\": \"pending\",\n    \"priority\": \"high\"\n  }\n]",
+      "metadata": {
+       "todos": [
+        {
+         "content": "Teste 1 (R8): inscrição cancelada → POST presencas 403 NAO_INSCRITO",
+         "status": "in_progress",
+         "priority": "high"
+        },
+        {
+         "content": "Teste 2 (R8): inscrição expirada → POST presencas 403 NAO_INSCRITO",
+         "status": "pending",
+         "priority": "high"
+        },
+        {
+         "content": "Teste 3 (R18): manual em atividade cancelada — quem tem presença 200, quem não tem 403",
+         "status": "pending",
+         "priority": "high"
+        },
+        {
+         "content": "Rodar npm test completo e relatar número real",
+         "status": "pending",
+         "priority": "high"
+        },
+        {
+         "content": "Commit com a mensagem pedida",
+         "status": "pending",
+         "priority": "high"
+        }
+       ],
+       "truncated": false
+      },
+      "title": "5 todos",
+      "time": {
+       "start": 1789681479876,
+       "end": 1789681479880
+      }
+     },
+     "id": "prt_0b1542ea4001YeKfeeid6aR5OE",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154268c001qlEtmCHx0X8nIb"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-finish",
+     "tokens": {
+      "total": 66529,
+      "input": 3203,
+      "output": 350,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 62976
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b154327e001G6uGIs6wYYcGMN",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154268c001qlEtmCHx0X8nIb"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 68245,
+     "input": 708,
+     "output": 1489,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 66048
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681480637,
+     "completed": 1789681487469
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b15433bd001zEuDE3HS3ftMQF",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "type": "step-start",
+     "id": "prt_0b1543963001KhjJD0XHZJn4tM",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15433bd001zEuDE3HS3ftMQF"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now write the test file with test 1 only, following the pattern of the other files. I'll build up the file. But since the file is new, I'll write it incrementally. Let me write test 1 first.",
+     "time": {
+      "start": 1789681482199,
+      "end": 1789681482287
+     },
+     "id": "prt_0b15439d7001xKIU0h6EkokbCt",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15433bd001zEuDE3HS3ftMQF"
+    },
+    {
+     "type": "text",
+     "text": "Análise prévia: o código de `registrarPresenca`/`registrarPresencaManual` só passa quem está `confirmada` (presencas.js:100-107 e 163-168) e checa presença existente antes do `NAO_INSCRITO` (R17) — logo os estados `cancelada`/`expirada` e o caso manual-em-atividade-cancelada já são cobertos pelo código; falta a prova. Escrevo o teste 1 e rodo.",
+     "time": {
+      "start": 1789681482290,
+      "end": 1789681486768
+     },
+     "id": "prt_0b1543a32001vt7PnwYDafpVs1",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15433bd001zEuDE3HS3ftMQF"
+    },
+    {
+     "type": "tool",
+     "tool": "write",
+     "callID": "call_b77c510695d94a7992ba0156",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+       "content": "import { describe, it, before, after } from 'node:test'\nimport assert from 'node:assert/strict'\nimport { createServer } from 'node:http'\nimport { createApp } from '../src/index.js'\n\nfunction listen(app) {\n  return new Promise((resolve, reject) => {\n    const server = createServer(app)\n    server.listen(0, () => {\n      const { port } = server.address()\n      resolve({ server, port })\n    })\n    server.on('error', reject)\n  })\n}\n\nfunction close(server) {\n  return new Promise(resolve => server.close(resolve))\n}\n\nasync function reset(port) {\n  const res = await fetch(`http://localhost:${port}/_teste/reset`, { method: 'POST' })\n  assert.equal(res.status, 204)\n}\n\nasync function relogio(port, iso) {\n  const res = await fetch(`http://localhost:${port}/_teste/relogio`, {\n    method: 'PUT',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ agora: iso })\n  })\n  assert.equal(res.status, 200)\n}\n\nasync function criaPalestra(port, corpo = {}) {\n  const res = await fetch(`http://localhost:${port}/atividades`, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },\n    body: JSON.stringify({\n      titulo: 'Palestra de abertura',\n      tipo: 'palestra',\n      salaId: 'auditorio',\n      vagas: 100,\n      encontros: [\n        { inicio: '2026-10-19T19:00:00-03:00', fim: '2026-10-19T22:00:00-03:00' }\n      ],\n      ...corpo\n    })\n  })\n  assert.equal(res.status, 201)\n  const atividade = await res.json()\n  return { atividadeId: atividade.id, encontroId: atividade.encontros[0].id }\n}\n\nasync function inscreve(port, atividadeId, xUsuario) {\n  const res = await fetch(\n    `http://localhost:${port}/atividades/${atividadeId}/inscricoes`,\n    {\n      method: 'POST',\n      headers: { 'X-Usuario': xUsuario }\n    }\n  )\n  assert.equal(res.status, 201)\n  return res.json()\n}\n\nasync function obtemCodigo(port, encontroId) {\n  const res = await fetch(\n    `http://localhost:${port}/encontros/${encontroId}/codigo`,\n    { headers: { 'X-Usuario': 'org-ana' } }\n  )\n  assert.equal(res.status, 200)\n  return (await res.json()).codigo\n}\n\nasync function enviaPresenca(port, encontroId, xUsuario, codigo) {\n  const res = await fetch(\n    `http://localhost:${port}/encontros/${encontroId}/presencas`,\n    {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json', 'X-Usuario': xUsuario },\n      body: JSON.stringify({ codigo })\n    }\n  )\n  return { status: res.status, body: await res.json() }\n}\n\nasync function enviaManual(port, encontroId, corpo, xUsuario) {\n  const res = await fetch(\n    `http://localhost:${port}/encontros/${encontroId}/presencas/manual`,\n    {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json', 'X-Usuario': xUsuario },\n      body: JSON.stringify(corpo)\n    }\n  )\n  return { status: res.status, body: await res.json() }\n}\n\ndescribe('Auditoria M3 — lacunas do parecer 2026-09-17', () => {\n  let server, port\n\n  before(() => {\n    process.env.MODO_TESTE = '1'\n  })\n\n  before(async () => {\n    ;({ server, port } = await listen(createApp()))\n  })\n\n  after(() => close(server))\n\n  it('inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n    await reset(port)\n    const { atividadeId, encontroId } = await criaPalestra(port)\n    await relogio(port, '2026-10-19T10:00:00-03:00')\n    const inscricaoDeCarla = await inscreve(port, atividadeId, 'p-carla')\n    assert.equal(inscricaoDeCarla.status, 'confirmada')\n    await relogio(port, '2026-10-19T10:05:00-03:00')\n    const cancelada = await fetch(\n      `http://localhost:${port}/inscricoes/${inscricaoDeCarla.id}/cancelamento`,\n      { method: 'POST', headers: { 'X-Usuario': 'p-carla' } }\n    )\n    assert.equal(cancelada.status, 200)\n    assert.equal((await cancelada.json()).status, 'cancelada')\n    await relogio(port, '2026-10-19T19:03:45-03:00')\n    const codigo = await obtemCodigo(port, encontroId)\n    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n    assert.equal(status, 403)\n    assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n})"
+      },
+      "output": "Wrote file successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "filepath": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+       "exists": false,
+       "truncated": false
+      },
+      "title": "api\\test\\presenca-auditoria.test.js",
+      "time": {
+       "start": 1789681486704,
+       "end": 1789681486712
+      }
+     },
+     "id": "prt_0b1543cdf001Zy3NK7dzekxm3l",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15433bd001zEuDE3HS3ftMQF"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "type": "step-finish",
+     "tokens": {
+      "total": 68245,
+      "input": 708,
+      "output": 1489,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 66048
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1544d22001X5waudfoE2Aqzd",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15433bd001zEuDE3HS3ftMQF"
+    },
+    {
+     "type": "patch",
+     "hash": "c5dc67d871870aadc2b945d15b967e9356c54695",
+     "files": [
+      "C:/semana-academica/api/test/presenca-auditoria.test.js"
+     ],
+     "id": "prt_0b1544e6b001mwabw1ozkhPxyY",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15433bd001zEuDE3HS3ftMQF"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 68353,
+     "input": 164,
+     "output": 93,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 68096
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681487474,
+     "completed": 1789681490638
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b1544e72001Ia5Xwp5awW0Avv",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "type": "step-start",
+     "id": "prt_0b1545526001PfDlqwP1wgbwrU",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1544e72001Ia5Xwp5awW0Avv"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_cb0a118a661a4505bdf59b73",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "node --test --test-name-pattern \"inscrição cancelada\" test/presenca-auditoria.test.js",
+       "workdir": "C:\\semana-academica\\api"
+      },
+      "output": "▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (59.9684ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (67.5302ms)\nℹ tests 1\nℹ suites 1\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 267.0095\n",
+      "metadata": {
+       "output": "▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (59.9684ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (67.5302ms)\nℹ tests 1\nℹ suites 1\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 267.0095\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "node --test --test-name-pattern \"inscrição cancelada\" test/presenca-auditoria.test.js",
+      "time": {
+       "start": 1789681489483,
+       "end": 1789681490044
+      }
+     },
+     "id": "prt_0b1545586001V9eFMkBFYRWCGt",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1544e72001Ia5Xwp5awW0Avv"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "type": "step-finish",
+     "tokens": {
+      "total": 68353,
+      "input": 164,
+      "output": 93,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 68096
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b154599a0013z5I73o0yMQ2jW",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1544e72001Ia5Xwp5awW0Avv"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 69382,
+     "input": 150,
+     "output": 880,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 68352
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681490642,
+     "completed": 1789681496413
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b1545ad2001JiZBCVXmFMVPrl",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "type": "step-start",
+     "id": "prt_0b154621f001DDUAaWwHamE1rA",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1545ad2001JiZBCVXmFMVPrl"
+    },
+    {
+     "type": "reasoning",
+     "text": "Test 1 nasce verde — esperado: o código só aceita `confirmada` (presencas.js:166), `cancelada` cai em NAO_INSCRITO. Explained.\n\nNow test 2 (expirada). Append to file.",
+     "time": {
+      "start": 1789681492521,
+      "end": 1789681492822
+     },
+     "id": "prt_0b1546229001m0DS2QBx9Of1OK",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1545ad2001JiZBCVXmFMVPrl"
+    },
+    {
+     "type": "text",
+     "text": "Teste 1 já nasce verde — esperado: `registrarPresenca` só aceita status `confirmada` (presencas.js:166), então `cancelada` cai em `NAO_INSCRITO`. É a prova que faltava. Agora o teste 2 (expirada).",
+     "time": {
+      "start": 1789681492823,
+      "end": 1789681495581
+     },
+     "id": "prt_0b1546357001ZV9wWxkGRLjcGV",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1545ad2001JiZBCVXmFMVPrl"
+    },
+    {
+     "type": "tool",
+     "tool": "edit",
+     "callID": "call_1f8fbac228a44acd90fc24fc",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+       "oldString": "assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n})",
+       "newString": "assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n\n  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n  // janela abre em início − 15 min (spec M2).\n  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n    await reset(port)\n    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n    await relogio(port, '2026-10-19T10:00:00-03:00')\n    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n    assert.equal(deDiego.status, 'confirmada')\n    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n    assert.equal(deCarla.status, 'em_espera')\n    await relogio(port, '2026-10-19T18:00:00-03:00')\n    const cancelada = await fetch(\n      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n    )\n    assert.equal(cancelada.status, 200)\n    const convocada = await (\n      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n        headers: { 'X-Usuario': 'p-carla' }\n      })\n    ).json()\n    assert.equal(convocada.status, 'convocada')\n    assert.equal(\n      Date.parse(convocada.convocadaAte),\n      Date.parse('2026-10-19T18:30:00-03:00')\n    )\n    await relogio(port, '2026-10-19T19:03:45-03:00')\n    const expirada = await (\n      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n        headers: { 'X-Usuario': 'p-carla' }\n      })\n    ).json()\n    assert.equal(expirada.status, 'expirada')\n    const codigo = await obtemCodigo(port, encontroId)\n    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n    assert.equal(status, 403)\n    assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n})"
+      },
+      "output": "Edit applied successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "diff": "Index: C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n===================================================================\n--- C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n+++ C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n@@ -129,5 +129,46 @@\n     assert.equal(status, 403)\n     assert.equal(body.erro, 'NAO_INSCRITO')\n     assert.equal(typeof body.mensagem, 'string')\n   })\n+\n+  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n+  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n+  // janela abre em início − 15 min (spec M2).\n+  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n+    assert.equal(deDiego.status, 'confirmada')\n+    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n+    assert.equal(deCarla.status, 'em_espera')\n+    await relogio(port, '2026-10-19T18:00:00-03:00')\n+    const cancelada = await fetch(\n+      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n+    )\n+    assert.equal(cancelada.status, 200)\n+    const convocada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(convocada.status, 'convocada')\n+    assert.equal(\n+      Date.parse(convocada.convocadaAte),\n+      Date.parse('2026-10-19T18:30:00-03:00')\n+    )\n+    await relogio(port, '2026-10-19T19:03:45-03:00')\n+    const expirada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(expirada.status, 'expirada')\n+    const codigo = await obtemCodigo(port, encontroId)\n+    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n+    assert.equal(status, 403)\n+    assert.equal(body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof body.mensagem, 'string')\n+  })\n })\n\\ No newline at end of file\n",
+       "filediff": {
+        "file": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+        "patch": "Index: C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n===================================================================\n--- C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n+++ C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n@@ -129,5 +129,46 @@\n     assert.equal(status, 403)\n     assert.equal(body.erro, 'NAO_INSCRITO')\n     assert.equal(typeof body.mensagem, 'string')\n   })\n+\n+  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n+  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n+  // janela abre em início − 15 min (spec M2).\n+  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n+    assert.equal(deDiego.status, 'confirmada')\n+    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n+    assert.equal(deCarla.status, 'em_espera')\n+    await relogio(port, '2026-10-19T18:00:00-03:00')\n+    const cancelada = await fetch(\n+      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n+    )\n+    assert.equal(cancelada.status, 200)\n+    const convocada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(convocada.status, 'convocada')\n+    assert.equal(\n+      Date.parse(convocada.convocadaAte),\n+      Date.parse('2026-10-19T18:30:00-03:00')\n+    )\n+    await relogio(port, '2026-10-19T19:03:45-03:00')\n+    const expirada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(expirada.status, 'expirada')\n+    const codigo = await obtemCodigo(port, encontroId)\n+    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n+    assert.equal(status, 403)\n+    assert.equal(body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof body.mensagem, 'string')\n+  })\n })\n\\ No newline at end of file\n",
+        "additions": 41,
+        "deletions": 0
+       },
+       "truncated": false
+      },
+      "title": "api\\test\\presenca-auditoria.test.js",
+      "time": {
+       "start": 1789681495418,
+       "end": 1789681495445
+      }
+     },
+     "id": "prt_0b15464020011ju5dIqWTOO3V9",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1545ad2001JiZBCVXmFMVPrl"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "1d2b08f1d6477257dd5d089a717c1810d42432b2",
+     "type": "step-finish",
+     "tokens": {
+      "total": 69382,
+      "input": 150,
+      "output": 880,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 68352
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1546ff00017Siz6XFyOurSEv",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1545ad2001JiZBCVXmFMVPrl"
+    },
+    {
+     "type": "patch",
+     "hash": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "files": [
+      "C:/semana-academica/api/test/presenca-auditoria.test.js"
+     ],
+     "id": "prt_0b154715a001dxNIjhiLR5xhJR",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1545ad2001JiZBCVXmFMVPrl"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 69488,
+     "input": 786,
+     "output": 94,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 68608
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681496418,
+     "completed": 1789681500833
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b15471620014cg1bsEFm8q2PR",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "1d2b08f1d6477257dd5d089a717c1810d42432b2",
+     "type": "step-start",
+     "id": "prt_0b154772a001LUxFvKLn4loxpq",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15471620014cg1bsEFm8q2PR"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_516590d6e0b5463d93ddd4d5",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "node --test --test-name-pattern \"inscrição expirada\" test/presenca-auditoria.test.js",
+       "workdir": "C:\\semana-academica\\api"
+      },
+      "output": "▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (70.1969ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (76.6162ms)\nℹ tests 1\nℹ suites 1\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 300.4261\n",
+      "metadata": {
+       "output": "▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (70.1969ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (76.6162ms)\nℹ tests 1\nℹ suites 1\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 300.4261\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "node --test --test-name-pattern \"inscrição expirada\" test/presenca-auditoria.test.js",
+      "time": {
+       "start": 1789681499581,
+       "end": 1789681500231
+      }
+     },
+     "id": "prt_0b15477a0001MrupGHbFvNFqs2",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15471620014cg1bsEFm8q2PR"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "1d2b08f1d6477257dd5d089a717c1810d42432b2",
+     "type": "step-finish",
+     "tokens": {
+      "total": 69488,
+      "input": 786,
+      "output": 94,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 68608
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b154815b001PQjgjZ8YDYwMWN",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15471620014cg1bsEFm8q2PR"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 70526,
+     "input": 262,
+     "output": 888,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 69376
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681500838,
+     "completed": 1789681507247
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b15482a6001YG0V9EJt48YslT",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "1d2b08f1d6477257dd5d089a717c1810d42432b2",
+     "type": "step-start",
+     "id": "prt_0b1548ed9001D9UtmOjo8lNMZx",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15482a6001YG0V9EJt48YslT"
+    },
+    {
+     "type": "reasoning",
+     "text": "Test 2 also green. It also confirms the convocada → expirada via GET /inscricoes/:id (the lazy processing). The code only accepts confirmada so expirada → NAO_INSCRITO. Good.\n\nNow test 3 (R18 manual).",
+     "time": {
+      "start": 1789681503963,
+      "end": 1789681504348
+     },
+     "id": "prt_0b1548edb0011js8Qdirzwq0Id",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15482a6001YG0V9EJt48YslT"
+    },
+    {
+     "type": "text",
+     "text": "Teste 2 verde — a prova confirma a transição `convocada` (prazo 18:30 = fechamento) → `expirada` via GET, e o POST cai em `NAO_INSCRITO` porque só `confirmada` passa. Falta o teste 3 (R18 manual).",
+     "time": {
+      "start": 1789681504350,
+      "end": 1789681506511
+     },
+     "id": "prt_0b154905e001zcnfMIp0n6V1vg",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15482a6001YG0V9EJt48YslT"
+    },
+    {
+     "type": "tool",
+     "tool": "edit",
+     "callID": "call_37c9bff711544d5faaa91de2",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+       "newString": "assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n})",
+       "oldString": "assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n\n  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n  // janela abre em início − 15 min (spec M2).\n  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n    await reset(port)\n    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n    await relogio(port, '2026-10-19T10:00:00-03:00')\n    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n    assert.equal(deDiego.status, 'confirmada')\n    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n    assert.equal(deCarla.status, 'em_espera')\n    await relogio(port, '2026-10-19T18:00:00-03:00')\n    const cancelada = await fetch(\n      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n    )\n    assert.equal(cancelada.status, 200)\n    const convocada = await (\n      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n        headers: { 'X-Usuario': 'p-carla' }\n      })\n    ).json()\n    assert.equal(convocada.status, 'convocada')\n    assert.equal(\n      Date.parse(convocada.convocadaAte),\n      Date.parse('2026-10-19T18:30:00-03:00')\n    )\n    await relogio(port, '2026-10-19T19:03:45-03:00')\n    const expirada = await (\n      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n        headers: { 'X-Usuario': 'p-carla' }\n      })\n    ).json()\n    assert.equal(expirada.status, 'expirada')\n    const codigo = await obtemCodigo(port, encontroId)\n    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n    assert.equal(status, 403)\n    assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n})"
+      },
+      "output": "Edit applied successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "diff": "Index: C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n===================================================================\n--- C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n+++ C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n@@ -129,46 +129,5 @@\n     assert.equal(status, 403)\n     assert.equal(body.erro, 'NAO_INSCRITO')\n     assert.equal(typeof body.mensagem, 'string')\n   })\n-\n-  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n-  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n-  // janela abre em início − 15 min (spec M2).\n-  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n-    await reset(port)\n-    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n-    await relogio(port, '2026-10-19T10:00:00-03:00')\n-    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n-    assert.equal(deDiego.status, 'confirmada')\n-    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n-    assert.equal(deCarla.status, 'em_espera')\n-    await relogio(port, '2026-10-19T18:00:00-03:00')\n-    const cancelada = await fetch(\n-      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n-      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n-    )\n-    assert.equal(cancelada.status, 200)\n-    const convocada = await (\n-      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n-        headers: { 'X-Usuario': 'p-carla' }\n-      })\n-    ).json()\n-    assert.equal(convocada.status, 'convocada')\n-    assert.equal(\n-      Date.parse(convocada.convocadaAte),\n-      Date.parse('2026-10-19T18:30:00-03:00')\n-    )\n-    await relogio(port, '2026-10-19T19:03:45-03:00')\n-    const expirada = await (\n-      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n-        headers: { 'X-Usuario': 'p-carla' }\n-      })\n-    ).json()\n-    assert.equal(expirada.status, 'expirada')\n-    const codigo = await obtemCodigo(port, encontroId)\n-    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n-    assert.equal(status, 403)\n-    assert.equal(body.erro, 'NAO_INSCRITO')\n-    assert.equal(typeof body.mensagem, 'string')\n-  })\n })\n\\ No newline at end of file\n",
+       "filediff": {
+        "file": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+        "patch": "Index: C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n===================================================================\n--- C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n+++ C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n@@ -129,46 +129,5 @@\n     assert.equal(status, 403)\n     assert.equal(body.erro, 'NAO_INSCRITO')\n     assert.equal(typeof body.mensagem, 'string')\n   })\n-\n-  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n-  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n-  // janela abre em início − 15 min (spec M2).\n-  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n-    await reset(port)\n-    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n-    await relogio(port, '2026-10-19T10:00:00-03:00')\n-    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n-    assert.equal(deDiego.status, 'confirmada')\n-    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n-    assert.equal(deCarla.status, 'em_espera')\n-    await relogio(port, '2026-10-19T18:00:00-03:00')\n-    const cancelada = await fetch(\n-      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n-      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n-    )\n-    assert.equal(cancelada.status, 200)\n-    const convocada = await (\n-      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n-        headers: { 'X-Usuario': 'p-carla' }\n-      })\n-    ).json()\n-    assert.equal(convocada.status, 'convocada')\n-    assert.equal(\n-      Date.parse(convocada.convocadaAte),\n-      Date.parse('2026-10-19T18:30:00-03:00')\n-    )\n-    await relogio(port, '2026-10-19T19:03:45-03:00')\n-    const expirada = await (\n-      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n-        headers: { 'X-Usuario': 'p-carla' }\n-      })\n-    ).json()\n-    assert.equal(expirada.status, 'expirada')\n-    const codigo = await obtemCodigo(port, encontroId)\n-    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n-    assert.equal(status, 403)\n-    assert.equal(body.erro, 'NAO_INSCRITO')\n-    assert.equal(typeof body.mensagem, 'string')\n-  })\n })\n\\ No newline at end of file\n",
+        "additions": 0,
+        "deletions": 41
+       },
+       "truncated": false
+      },
+      "title": "api\\test\\presenca-auditoria.test.js",
+      "time": {
+       "start": 1789681506487,
+       "end": 1789681506507
+      }
+     },
+     "id": "prt_0b154919c001vx84bYm4tIHOtT",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15482a6001YG0V9EJt48YslT"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "type": "step-finish",
+     "tokens": {
+      "total": 70526,
+      "input": 262,
+      "output": 888,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 69376
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1549a5e001xxujNsBk24Z4Mb",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15482a6001YG0V9EJt48YslT"
+    },
+    {
+     "type": "patch",
+     "hash": "1d2b08f1d6477257dd5d089a717c1810d42432b2",
+     "files": [
+      "C:/semana-academica/api/test/presenca-auditoria.test.js"
+     ],
+     "id": "prt_0b1549bac0014TXIVUxo0NZ56C",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15482a6001YG0V9EJt48YslT"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 70795,
+     "input": 906,
+     "output": 257,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 69632
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681507253,
+     "completed": 1789681510376
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b1549bb5001IENY7jYaS2hQ98",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "type": "step-start",
+     "id": "prt_0b154a1a9001aFFg3gqwsmP1ic",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1549bb5001IENY7jYaS2hQ98"
+    },
+    {
+     "type": "reasoning",
+     "text": "Oops, I did the edit backwards. I replaced the large block with the small block, which removes the test 2 that I just added. Let me check — I put oldString as the full test-2 content ending with `})`, and newString as just the first test ending + `})`. That deleted test 2!\n\nWait let me re-read. My edit: newString = small (test 1 end + close describe), oldString = the larger block (test 1 end + test 2). So it replaced test1end+test2 with test1end+close. That REMOVED test 2. That's wrong — I intended to append test 3 after test 2.\n\nLet me re-read the file to fix.",
+     "time": {
+      "start": 1789681508808,
+      "end": 1789681509386
+     },
+     "id": "prt_0b154a1c8001tDEQjTilK6TSSr",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1549bb5001IENY7jYaS2hQ98"
+    },
+    {
+     "type": "text",
+     "text": "Errei a direção do edit — removi o teste 2. Vou reler e corrigir.",
+     "time": {
+      "start": 1789681509390,
+      "end": 1789681509781
+     },
+     "id": "prt_0b154a40d0016LhF1AA2GCQZKU",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1549bb5001IENY7jYaS2hQ98"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_6b2eaec5bf904d9bad913354",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+       "offset": 100
+      },
+      "output": "[1618 caracteres omitidos]",
+      "title": "api\\test\\presenca-auditoria.test.js",
+      "time": {
+       "start": 1789681509660,
+       "end": 1789681509668
+      }
+     },
+     "id": "prt_0b154a46e001Oc8ePguwT6AaDo",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1549bb5001IENY7jYaS2hQ98"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "type": "step-finish",
+     "tokens": {
+      "total": 70795,
+      "input": 906,
+      "output": 257,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 69632
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b154a6ae001DRPmhN2X3ptU55",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1549bb5001IENY7jYaS2hQ98"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 72740,
+     "input": 697,
+     "output": 1387,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 70656
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681510381,
+     "completed": 1789681517344
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b154a7ed001t0DkP2tt1h3JHm",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "type": "step-start",
+     "id": "prt_0b154ad5f001BD5K7lkfwmNpBP",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154a7ed001t0DkP2tt1h3JHm"
+    },
+    {
+     "type": "reasoning",
+     "text": "Confirmed: test 2 was removed. I need to re-add test 2 and test 3. Let me use edit to replace the trailing `})` with tests 2 and 3 followed by `})`.\n\nThe last block is:\n```\n    assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n})\n```\nThat's the end of test 1 + close describe. But this pattern `assert.equal(body.erro...` also appears... in test 1 only now in the file. Let me do the edit with the unique surrounding context.",
+     "time": {
+      "start": 1789681511777,
+      "end": 1789681512285
+     },
+     "id": "prt_0b154ad61001pMloILfN8wLZvq",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154a7ed001t0DkP2tt1h3JHm"
+    },
+    {
+     "type": "tool",
+     "tool": "edit",
+     "callID": "call_ca8697a4621f4a1d85c0c787",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+       "oldString": "assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n})",
+       "newString": "assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n\n  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n  // janela abre em início − 15 min (spec M2).\n  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n    await reset(port)\n    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n    await relogio(port, '2026-10-19T10:00:00-03:00')\n    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n    assert.equal(deDiego.status, 'confirmada')\n    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n    assert.equal(deCarla.status, 'em_espera')\n    await relogio(port, '2026-10-19T18:00:00-03:00')\n    const cancelada = await fetch(\n      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n    )\n    assert.equal(cancelada.status, 200)\n    const convocada = await (\n      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n        headers: { 'X-Usuario': 'p-carla' }\n      })\n    ).json()\n    assert.equal(convocada.status, 'convocada')\n    assert.equal(\n      Date.parse(convocada.convocadaAte),\n      Date.parse('2026-10-19T18:30:00-03:00')\n    )\n    await relogio(port, '2026-10-19T19:03:45-03:00')\n    const expirada = await (\n      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n        headers: { 'X-Usuario': 'p-carla' }\n      })\n    ).json()\n    assert.equal(expirada.status, 'expirada')\n    const codigo = await obtemCodigo(port, encontroId)\n    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n    assert.equal(status, 403)\n    assert.equal(body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof body.mensagem, 'string')\n  })\n\n  it('atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18)', async () => {\n    await reset(port)\n    const { atividadeId, encontroId } = await criaPalestra(port)\n    await relogio(port, '2026-10-19T10:00:00-03:00')\n    await inscreve(port, atividadeId, 'p-carla')\n    await inscreve(port, atividadeId, 'p-diego')\n    await relogio(port, '2026-10-19T18:47:00-03:00')\n    const primeira = await enviaManual(\n      port,\n      encontroId,\n      { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n      'org-ana'\n    )\n    assert.equal(primeira.status, 201)\n    await relogio(port, '2026-10-19T18:50:00-03:00')\n    const cancelamento = await fetch(\n      `http://localhost:${port}/atividades/${atividadeId}/cancelamento`,\n      { method: 'POST', headers: { 'X-Usuario': 'org-ana' } }\n    )\n    assert.equal(cancelamento.status, 200)\n    await relogio(port, '2026-10-19T18:55:00-03:00')\n    const repetida = await enviaManual(\n      port,\n      encontroId,\n      { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n      'org-ana'\n    )\n    assert.equal(repetida.status, 200)\n    assert.equal(repetida.body.id, primeira.body.id)\n    const semPresenca = await enviaManual(\n      port,\n      encontroId,\n      { participanteId: 'p-carla', justificativa: 'justificativa valida' },\n      'org-ana'\n    )\n    assert.equal(semPresenca.status, 403)\n    assert.equal(semPresenca.body.erro, 'NAO_INSCRITO')\n    assert.equal(typeof semPresenca.body.mensagem, 'string')\n  })\n})"
+      },
+      "output": "Edit applied successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "diff": "Index: C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n===================================================================\n--- C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n+++ C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n@@ -129,5 +129,86 @@\n     assert.equal(status, 403)\n     assert.equal(body.erro, 'NAO_INSCRITO')\n     assert.equal(typeof body.mensagem, 'string')\n   })\n+\n+  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n+  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n+  // janela abre em início − 15 min (spec M2).\n+  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n+    assert.equal(deDiego.status, 'confirmada')\n+    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n+    assert.equal(deCarla.status, 'em_espera')\n+    await relogio(port, '2026-10-19T18:00:00-03:00')\n+    const cancelada = await fetch(\n+      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n+    )\n+    assert.equal(cancelada.status, 200)\n+    const convocada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(convocada.status, 'convocada')\n+    assert.equal(\n+      Date.parse(convocada.convocadaAte),\n+      Date.parse('2026-10-19T18:30:00-03:00')\n+    )\n+    await relogio(port, '2026-10-19T19:03:45-03:00')\n+    const expirada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(expirada.status, 'expirada')\n+    const codigo = await obtemCodigo(port, encontroId)\n+    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n+    assert.equal(status, 403)\n+    assert.equal(body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof body.mensagem, 'string')\n+  })\n+\n+  it('atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port)\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    await inscreve(port, atividadeId, 'p-carla')\n+    await inscreve(port, atividadeId, 'p-diego')\n+    await relogio(port, '2026-10-19T18:47:00-03:00')\n+    const primeira = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(primeira.status, 201)\n+    await relogio(port, '2026-10-19T18:50:00-03:00')\n+    const cancelamento = await fetch(\n+      `http://localhost:${port}/atividades/${atividadeId}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'org-ana' } }\n+    )\n+    assert.equal(cancelamento.status, 200)\n+    await relogio(port, '2026-10-19T18:55:00-03:00')\n+    const repetida = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(repetida.status, 200)\n+    assert.equal(repetida.body.id, primeira.body.id)\n+    const semPresenca = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-carla', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(semPresenca.status, 403)\n+    assert.equal(semPresenca.body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof semPresenca.body.mensagem, 'string')\n+  })\n })\n\\ No newline at end of file\n",
+       "filediff": {
+        "file": "C:\\semana-academica\\api\\test\\presenca-auditoria.test.js",
+        "patch": "Index: C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n===================================================================\n--- C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n+++ C:\\semana-academica\\api\\test\\presenca-auditoria.test.js\n@@ -129,5 +129,86 @@\n     assert.equal(status, 403)\n     assert.equal(body.erro, 'NAO_INSCRITO')\n     assert.equal(typeof body.mensagem, 'string')\n   })\n+\n+  // A prova é com expirada: convocada nunca coexiste com a janela de presença,\n+  // porque a convocação vence no máximo no fechamento (início − 30 min) e a\n+  // janela abre em início − 15 min (spec M2).\n+  it('inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port, { vagas: 1 })\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    const deDiego = await inscreve(port, atividadeId, 'p-diego')\n+    assert.equal(deDiego.status, 'confirmada')\n+    const deCarla = await inscreve(port, atividadeId, 'p-carla')\n+    assert.equal(deCarla.status, 'em_espera')\n+    await relogio(port, '2026-10-19T18:00:00-03:00')\n+    const cancelada = await fetch(\n+      `http://localhost:${port}/inscricoes/${deDiego.id}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'p-diego' } }\n+    )\n+    assert.equal(cancelada.status, 200)\n+    const convocada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(convocada.status, 'convocada')\n+    assert.equal(\n+      Date.parse(convocada.convocadaAte),\n+      Date.parse('2026-10-19T18:30:00-03:00')\n+    )\n+    await relogio(port, '2026-10-19T19:03:45-03:00')\n+    const expirada = await (\n+      await fetch(`http://localhost:${port}/inscricoes/${deCarla.id}`, {\n+        headers: { 'X-Usuario': 'p-carla' }\n+      })\n+    ).json()\n+    assert.equal(expirada.status, 'expirada')\n+    const codigo = await obtemCodigo(port, encontroId)\n+    const { status, body } = await enviaPresenca(port, encontroId, 'p-carla', codigo)\n+    assert.equal(status, 403)\n+    assert.equal(body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof body.mensagem, 'string')\n+  })\n+\n+  it('atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18)', async () => {\n+    await reset(port)\n+    const { atividadeId, encontroId } = await criaPalestra(port)\n+    await relogio(port, '2026-10-19T10:00:00-03:00')\n+    await inscreve(port, atividadeId, 'p-carla')\n+    await inscreve(port, atividadeId, 'p-diego')\n+    await relogio(port, '2026-10-19T18:47:00-03:00')\n+    const primeira = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(primeira.status, 201)\n+    await relogio(port, '2026-10-19T18:50:00-03:00')\n+    const cancelamento = await fetch(\n+      `http://localhost:${port}/atividades/${atividadeId}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'org-ana' } }\n+    )\n+    assert.equal(cancelamento.status, 200)\n+    await relogio(port, '2026-10-19T18:55:00-03:00')\n+    const repetida = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-diego', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(repetida.status, 200)\n+    assert.equal(repetida.body.id, primeira.body.id)\n+    const semPresenca = await enviaManual(\n+      port,\n+      encontroId,\n+      { participanteId: 'p-carla', justificativa: 'justificativa valida' },\n+      'org-ana'\n+    )\n+    assert.equal(semPresenca.status, 403)\n+    assert.equal(semPresenca.body.erro, 'NAO_INSCRITO')\n+    assert.equal(typeof semPresenca.body.mensagem, 'string')\n+  })\n })\n\\ No newline at end of file\n",
+        "additions": 81,
+        "deletions": 0
+       },
+       "truncated": false
+      },
+      "title": "api\\test\\presenca-auditoria.test.js",
+      "time": {
+       "start": 1789681516599,
+       "end": 1789681516610
+      }
+     },
+     "id": "prt_0b154af5f001c20OMOqQ1uxpmq",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154a7ed001t0DkP2tt1h3JHm"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-finish",
+     "tokens": {
+      "total": 72740,
+      "input": 697,
+      "output": 1387,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 70656
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b154c1d9001DbfPtrwgBPKukM",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154a7ed001t0DkP2tt1h3JHm"
+    },
+    {
+     "type": "patch",
+     "hash": "a0b96f2bd822c0abb4240c34dc319afb5fedbe1a",
+     "files": [
+      "C:/semana-academica/api/test/presenca-auditoria.test.js"
+     ],
+     "id": "prt_0b154c31d001x0mvxrYKuc1AoN",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154a7ed001t0DkP2tt1h3JHm"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 72863,
+     "input": 1328,
+     "output": 111,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 71424
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681517349,
+     "completed": 1789681520522
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b154c325001najzCvEwDlwGu8",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-start",
+     "id": "prt_0b154c889001YBFwCFTICA7HFr",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154c325001najzCvEwDlwGu8"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now run both test 2 and test 3 to confirm.",
+     "time": {
+      "start": 1789681518738,
+      "end": 1789681518833
+     },
+     "id": "prt_0b154c892001s53OujEWu4968J",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154c325001najzCvEwDlwGu8"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_8828e2dfa9a04925b19d5d94",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "node --test --test-name-pattern \"expirada|atividade cancelada: manual\" test/presenca-auditoria.test.js",
+       "workdir": "C:\\semana-academica\\api"
+      },
+      "output": "▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (66.586ms)\n  ✔ atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18) (55.2142ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (128.6689ms)\nℹ tests 2\nℹ suites 1\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 331.916\n",
+      "metadata": {
+       "output": "▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (66.586ms)\n  ✔ atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18) (55.2142ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (128.6689ms)\nℹ tests 2\nℹ suites 1\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 331.916\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "node --test --test-name-pattern \"expirada|atividade cancelada: manual\" test/presenca-auditoria.test.js",
+      "time": {
+       "start": 1789681519320,
+       "end": 1789681519945
+      }
+     },
+     "id": "prt_0b154c8f3001cM4luj64JBXe4k",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154c325001najzCvEwDlwGu8"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-finish",
+     "tokens": {
+      "total": 72863,
+      "input": 1328,
+      "output": 111,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 71424
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b154ce69001v5Isi2pjF6eeSl",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154c325001najzCvEwDlwGu8"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 73298,
+     "input": 354,
+     "output": 240,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 72704
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681520526,
+     "completed": 1789681527340
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b154cf8e001jP0ggduTtKbjBy",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-start",
+     "id": "prt_0b154d651001lBJL4fkbU8Qpb5",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154cf8e001jP0ggduTtKbjBy"
+    },
+    {
+     "type": "reasoning",
+     "text": "All three tests pass. Test 3 (R18) green: p-diego with existing presença → 200 same id (check after cancellation, because presença-existing check precedes NAO_INSCRITO in R17 order); p-carla no presença → 403 (inscrições cancelada by cancelamento).\n\nNow run full npm test.",
+     "time": {
+      "start": 1789681522261,
+      "end": 1789681522585
+     },
+     "id": "prt_0b154d655001t8eE2RwbzAYAOo",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154cf8e001jP0ggduTtKbjBy"
+    },
+    {
+     "type": "text",
+     "text": "Testes 2 e 3 verdes. O 3º confirma exatamente a R18: cancelamento da atividade cancela as inscrições; quem já tem presença recebe 200 (a checagem de presença existente vem antes do `NAO_INSCRITO`, R17), quem não tem recebe 403. Agora a suíte completa.",
+     "time": {
+      "start": 1789681522588,
+      "end": 1789681523567
+     },
+     "id": "prt_0b154d79c001MwAlf9TnniZJWX",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154cf8e001jP0ggduTtKbjBy"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_11e388efb00544eda60efd12",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "npm test",
+       "workdir": "C:\\semana-academica\\api",
+       "timeout": 180000
+      },
+      "output": "\n> semana-academica-api@0.1.0 test\n> node --test test/*.test.js\n\n▶ F2 — validações da criação\n  ✔ recusa quantidade de encontros fora do limite por tipo (101.7161ms)\n  ✔ recusa encontro fora da janela ou atravessando a meia-noite, mas aceita qualquer horário (30.193ms)\n  ✔ recusa encontros da mesma atividade que se sobrepõem ou se tocam (16.1734ms)\n  ✔ recusa encontro com duração fora de 1h a 4h inclusive (13.7362ms)\n  ✔ recusa vagas 0, negativa ou fracionária como DADOS_INVALIDOS (8.4097ms)\n  ✔ prioriza QUANTIDADE_DE_ENCONTROS sobre ENCONTRO_INVALIDO (4.7182ms)\n✔ F2 — validações da criação (196.9344ms)\n▶ F3 — vagas e conflito de sala\n  ✔ recusa vagas acima da capacidade da sala e aceita lotar até a capacidade (102.0702ms)\n  ✔ recusa outra atividade na mesma sala a menos de 15 min do fim de um encontro (26.1516ms)\n  ✔ cancelar atividade libera a sala para outra atividade no mesmo horário (13.1637ms)\n  ✔ PATCH elevando vagas além da capacidade devolve 422 VAGAS_ACIMA_DA_CAPACIDADE (49.2696ms)\n  ✔ prioriza ENCONTRO_INVALIDO sobre VAGAS_ACIMA_DA_CAPACIDADE e esta sobre CONFLITO_DE_SALA (7.0901ms)\n✔ F3 — vagas e conflito de sala (208.9759ms)\n▶ F4 — alterar atividade\n  ✔ PATCH aceita só titulo e vagas; tipo/salaId/encontros/campo fora devolvem CAMPO_NAO_EDITAVEL (132.4728ms)\n  ✔ PATCH com o 1º encontro já começado pelo relógio devolve 422 CAMPO_NAO_EDITAVEL (48.1187ms)\n  ✔ PATCH em atividade cancelada devolve ATIVIDADE_CANCELADA, vencendo CAMPO_NAO_EDITAVEL (12.7798ms)\n  ✔ prioriza CAMPO_NAO_EDITAVEL sobre VAGAS_ACIMA_DA_CAPACIDADE no PATCH (10.1139ms)\n  ✔ PATCH não muda sala nem encontros, e os ids enc_ continuam os mesmos (29.3502ms)\n  ✔ titulo aceita string vazia, um caractere e duplicado; PATCH também (15.6548ms)\n✔ F4 — alterar atividade (262.5741ms)\n▶ F5 — cancelamento e situação\n  ✔ só se cancela antes do início; no instante exato ou depois é ATIVIDADE_JA_INICIADA (196.3544ms)\n  ✔ cancelar de novo uma atividade cancelada devolve 422 ATIVIDADE_CANCELADA (13.0997ms)\n  ✔ relógio no início do 1º encontro mostra em_andamento; 1 min antes, prevista (27.4301ms)\n  ✔ relógio no fim do último encontro mostra encerrada; 1 min antes, em_andamento (12.6186ms)\n  ✔ cancelada prevalece sobre o relógio e a leitura devolve 200 com situacao cancelada (12.6701ms)\n  ✔ atividade cancelada não pode ser alterada nem cancelada de novo, e mantém os calculados (32.9573ms)\n✔ F5 — cancelamento e situação (310.0668ms)\n▶ F6 — listagem e filtros\n  ✔ listagem ordena pelo início do 1º encontro, desempatando por titulo (172.2328ms)\n  ✔ atividade cancelada continua na listagem e aparece no filtro de dia (23.4483ms)\n  ✔ ?dia retorna quem tem encontro naquele dia do fuso de Brasília (49.7663ms)\n  ✔ ?dia e ?tipo combinam em AND (10.9617ms)\n  ✔ filtro com valor inválido devolve 422 DADOS_INVALIDOS (4.8726ms)\n✔ F6 — listagem e filtros (274.1966ms)\n▶ F1 — criar e ler atividade\n  ✔ POST /atividades com org-ana e corpo válido devolve 201 com a Atividade (188.3865ms)\n  ✔ POST /atividades devolve ocupadas 0, vagasRestantes igual a vagas e emEspera 0 (7.7836ms)\n  ✔ POST ignorando cargaHorariaMinutos enviado no corpo e devolvendo a soma (25.8853ms)\n  ✔ POST soma 90+75 minutos em 165, sem arredondamento (8.0273ms)\n  ✔ POST /atividades com participante devolve 403 SOMENTE_ORGANIZACAO (17.2483ms)\n  ✔ GET /atividades com participante devolve 200 com a atividade criada (11.8009ms)\n  ✔ GET /atividades/:id com org-ana devolve 200 com a atividade criada (7.1551ms)\n  ✔ GET /atividades/:id em id inexistente devolve 404 NAO_ENCONTRADO (9.0174ms)\n  ✔ POST /atividades sem titulo devolve 422 DADOS_INVALIDOS (10.4709ms)\n  ✔ POST /atividades com tipo \"oficina\" devolve 422 DADOS_INVALIDOS (3.5657ms)\n  ✔ POST /atividades com salaId inexistente devolve 404 NAO_ENCONTRADO (3.2848ms)\n  ✔ POST /_teste/reset apaga a atividade criada e devolve os dados iniciais intactos (11.3286ms)\n✔ F1 — criar e ler atividade (320.15ms)\n▶ F1 — criar, ler e listar inscrição\n  ✔ POST /atividades/:id/inscricoes com vaga devolve 201 com Inscricao confirmada completa (166.7145ms)\n  ✔ POST /atividades/:id/inscricoes com organizacao devolve 403 SOMENTE_PARTICIPANTE mesmo em atividade inexistente (5.4183ms)\n  ✔ POST /atividades/:id/inscricoes em atividade inexistente devolve 404 NAO_ENCONTRADO (16.0904ms)\n  ✔ segunda inscricao da mesma pessoa na mesma atividade devolve 409 JA_INSCRITO (11.3214ms)\n  ✔ GET /inscricoes com participante devolve so as proprias e com filtro atividadeId (27.8104ms)\n  ✔ GET /inscricoes/:id de outro participante devolve 200 com a inscricao alheia (7.905ms)\n  ✔ cancelar ou confirmar inscricao de outro participante devolve 404 NAO_ENCONTRADO (10.1489ms)\n  ✔ GET /inscricoes/:id inexistente devolve 404 NAO_ENCONTRADO (3.199ms)\n  ✔ organizacao nas tres escritas de M2 devolve 403 SOMENTE_PARTICIPANTE (9.6875ms)\n✔ F1 — criar, ler e listar inscrição (273.8385ms)\n▶ F2 — lista de espera\n  ✔ inscricao sem vaga nasce em_espera com posicaoNaEspera em ordem de chegada (107.6167ms)\n  ✔ cancelar em_espera tira da fila e reindexa os demais, no mesmo instante criado (32.0805ms)\n  ✔ quem cancelou pode se reinscrever e entra no fim da fila (16.1059ms)\n✔ F2 — lista de espera (178.6408ms)\n▶ F3 — fechamento e recusas do POST\n  ✔ inscrever em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (124.2272ms)\n  ✔ inscricoes fecham 30 min antes do 1o encontro: 18h29 aceita, 18h30 inclusive recusa (46.8019ms)\n  ✔ em_andamento e encerrada tambem recusam com INSCRICOES_ENCERRADAS (42.1518ms)\n  ✔ encontro sobreposto com confirmada devolve 409 CONFLITO_DE_HORARIO (36.4049ms)\n  ✔ encontro que apenas encosta (fim de um = inicio do outro) nao conflita (11.3252ms)\n  ✔ so colide com em_espera nao bloqueia: inscricao nova em horario do em_espera vira confirmada (18.2363ms)\n  ✔ colisao só no 2o encontro de atividade multiencontro devolve conflito (24.0767ms)\n  ✔ 4o minicurso com vaga quando ja ocupa 3 devolve 422 LIMITE_DE_MINICURSOS (42.4671ms)\n  ✔ 4o minicurso sem vaga nao e recusado no limite: nasce em_espera (27.319ms)\n  ✔ 4o palestra com vaga nao conta para o limite de minicursos (24.1421ms)\n  ✔ com 1 dos 3 minicursos cancelado, o 4o com vaga nasce confirmada (21.6416ms)\n  ✔ atividade cancelada vence encerrada na ordem da regra R6 (10.5503ms)\n  ✔ encerrada vence ja_inscrito: ja ativo em atividade fechada recusa com INSCRICOES_ENCERRADAS (6.9924ms)\n✔ F3 — fechamento e recusas do POST (453.077ms)\n▶ F4 — convocacao e expiracao\n  ✔ cancelar confirmada libera vaga e o 1o da fila ja aparece convocado sem outro acesso (152.6162ms)\n  ✔ PATCH aumentando vagas libera vaga e promove o 1o da fila (18.6724ms)\n  ✔ convocadaAte nunca passa do fechamento das inscricoes (21.479ms)\n  ✔ convocacao vencida expira em cascata e o praco do proximo conta do vencimento anterior (58.634ms)\n  ✔ expirada pode se reinscrever e entra no fim da fila (30.5859ms)\n✔ F4 — convocacao e expiracao (294.2637ms)\n▶ F5 — confirmacao\n  ✔ confirmar convocada no prazo devolve 200 com confirmada e campos null (174.1439ms)\n  ✔ confirmar em_espera devolve 422 SEM_CONVOCACAO (15.0225ms)\n  ✔ confirmar convocada vencida devolve 422 CONVOCACAO_EXPIRADA (25.6508ms)\n  ✔ confirmar exatamente em convocadaAte e aceito (prazo ate X inclui X) (13.5652ms)\n  ✔ conflito criado depois recusa a confirmacao com 409 e a convocacao continua valida (34.986ms)\n  ✔ confirmar o 4o minicurso devolve 422 LIMITE_DE_MINICURSOS e segue convocada (31.9479ms)\n  ✔ convocada vencida com conflito recusa CONVOCACAO_EXPIRADA, 1a condicao da ordem (13.7301ms)\n  ✔ convocada com novo conflito E 4o minicurso recusa CONFLITO_DE_HORARIO, antes do limite (33.0655ms)\n✔ F5 — confirmacao (354.966ms)\n▶ F6 — cancelamento proprio\n  ✔ 1 minuto antes do inicio o cancelamento devolve 200 (213.8002ms)\n  ✔ no instante exato do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (22.3907ms)\n  ✔ depois do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (48.9786ms)\n  ✔ cancelar inscricao cancelada devolve 422 INSCRICAO_INATIVA (10.3202ms)\n  ✔ cancelar inscricao expirada devolve 422 INSCRICAO_INATIVA (22.2612ms)\n  ✔ inscricao cancelada em atividade ja iniciada devolve ATIVIDADE_JA_INICIADA (prioridade) (10.3206ms)\n  ✔ cancelar convocada libera vaga e promove o proximo da fila (14.4075ms)\n✔ F6 — cancelamento proprio (361.6863ms)\n▶ F7 — atividade cancelada e campos do M1\n  ✔ cancelar atividade transforma todas as ativas em cancelada e nao promove ninguem (185.4585ms)\n  ✔ GET /atividades/:id mostra ocupadas, emEspera e vagasRestantes calculados (28.2701ms)\n  ✔ PATCH reduzindo vagas abaixo dos ocupantes devolve 409 VAGAS_ABAIXO_DOS_INSCRITOS (44.5839ms)\n  ✔ com atividade cancelada os campos continuam calculados: ocupadas 0 e emEspera 0 (36.9058ms)\n✔ F7 — atividade cancelada e campos do M1 (306.6632ms)\n▶ F4 — rotas de teste ativas com MODO_TESTE=1\n  ✔ PUT /_teste/relogio com {agora} responde 200 com o valor recebido (146.3612ms)\n  ✔ PUT /_teste/relogio com corpo não-JSON devolve 422 DADOS_INVALIDOS (14.1905ms)\n  ✔ GET /_teste/relogio retorna o último horário definido por PUT e fica parado (17.8866ms)\n  ✔ POST /_teste/reset zera o relógio em 09:00 e mantém as 4 salas (26.2291ms)\n✔ F4 — rotas de teste ativas com MODO_TESTE=1 (240.4712ms)\n▶ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404\n  ✔ GET, POST e PUT em /_teste/* devolvem 404 (22.6861ms)\n✔ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404 (27.0353ms)\n▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (133.3364ms)\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (29.6899ms)\n  ✔ atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18) (24.6912ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (199.3347ms)\n▶ F1 — Emitir o código do encontro\n  ✔ participante em GET /encontros/:id/codigo recebe 403 SOMENTE_ORGANIZACAO (142.6414ms)\n  ✔ GET /encontros/:id/codigo em encontro inexistente devolve 404 NAO_ENCONTRADO (15.7867ms)\n  ✔ GET /encontros/:id/codigo em 18:45:00 (inicio - 15 min) devolve 200 com o CodigoDoEncontro (36.4661ms)\n  ✔ GET /encontros/:id/codigo em 18:44:59 devolve 422 FORA_DA_JANELA (14.2859ms)\n  ✔ GET /encontros/:id/codigo em 19:30:00 (inicio + 30 min) devolve 200 (29.4166ms)\n  ✔ GET /encontros/:id/codigo em 19:30:01 devolve 422 FORA_DA_JANELA (16.0545ms)\n  ✔ código das 19:03 tem 6 caracteres do alfabeto, trocaEm 19:04:00 e validoAte 19:05:00 (12.3883ms)\n  ✔ dois GET /encontros/:id/codigo no mesmo minuto devolvem o mesmo código, trocaEm e validoAte (11.8505ms)\n  ✔ ao cruzar o minuto o código gira e trocaEm aponta o próximo hh:mm:00 (9.5317ms)\n  ✔ GET /encontros/:id/codigo em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (13.0771ms)\n  ✔ atividade cancelada fora da janela devolve ATIVIDADE_CANCELADA antes de FORA_DA_JANELA (11.6412ms)\n  ✔ PATCH de título/vagas não muda o código nem a validade no mesmo minuto (10.854ms)\n  ✔ dois encontros no mesmo minuto têm códigos diferentes (o código é do encontro, não do minuto) (13.2073ms)\n✔ F1 — Emitir o código do encontro (349.3001ms)\n▶ F2 — Presença QR online\n  ✔ organização em POST /encontros/:id/presencas recebe 403 SOMENTE_PARTICIPANTE mesmo em encontro inexistente (103.5479ms)\n  ✔ POST /encontros/:id/presencas em encontro inexistente devolve 404 NAO_ENCONTRADO (40.9233ms)\n  ✔ encontro inexistente com corpo inválido devolve 404 (existência antes do corpo) (7.4717ms)\n  ✔ POST sem codigo no corpo devolve 422 DADOS_INVALIDOS (15.2591ms)\n  ✔ POST com codigo de tipo errado devolve 422 DADOS_INVALIDOS (24.6607ms)\n  ✔ primeira presença devolve 201 com Presenca qr completa no instante do envio (17.2485ms)\n  ✔ repetir o POST devolve 200 com a mesma presença, mesmo id e mesmos instantes (18.3745ms)\n  ✔ POST sem inscrição na atividade devolve 403 NAO_INSCRITO (12.0388ms)\n  ✔ POST com inscrição em_espera devolve 403 NAO_INSCRITO (34.4244ms)\n  ✔ aceita presença em 18:45:00 (inicio - 15 min, borda da abertura) (17.7835ms)\n  ✔ recusa presença em 18:44:59 (inicio - 15 min - 1 s, fora da janela) (16.016ms)\n  ✔ aceita presença em 19:30:00 (inicio + 30 min, borda do fechamento) (18.74ms)\n  ✔ recusa presença em 19:30:01 (inicio + 30 min + 1 s, fora da janela) (16.3213ms)\n  ✔ aceita código emitido às 19:03 enviado às 19:04:59 (minuto anterior) (14.9035ms)\n  ✔ recusa código emitido às 19:03 enviado às 19:05:00 (validoAte) (13.8037ms)\n  ✔ aceita código em minúscula (9.486ms)\n  ✔ aceita código com espaço (11.4052ms)\n  ✔ recusa código com caractere fora do alfabeto com 422 CODIGO_INVALIDO (10.3552ms)\n  ✔ recusa código emitido para outro encontro com 422 CODIGO_INVALIDO (8.0002ms)\n  ✔ presença existente fora da janela devolve 200 com a mesma presença (R11 antes de R1) (14.4182ms)\n  ✔ presença existente com código errado devolve 200 com a mesma presença (R11 antes de R6/R7) (11.4287ms)\n  ✔ não inscrito, fora da janela e código válido devolve 403 NAO_INSCRITO (R8 antes de R1) (7.1021ms)\n  ✔ fora da janela com código errado devolve 422 FORA_DA_JANELA (R1 antes de R6/R7) (7.9747ms)\n✔ F2 — Presença QR online (464.9552ms)\n▶ F3 — Presença offline (lidoEm)\n  ✔ envio às 20:00 com lidoEm 19:10:30 devolve 201 com origem qr_offline, lidoEm e registradaEm 20:00 (R10, R12) (148.1977ms)\n  ✔ envio às 00:00:01 (fim + 2 h + 1 s) devolve 422 SINCRONIZACAO_TARDIA (R9) (22.2304ms)\n  ✔ envio às 00:00:00 (fim + 2 h, borda) com lidoEm 19:10:30 devolve 201 (R9) (24.4244ms)\n  ✔ lidoEm 18:44:59 com envio dentro da janela devolve 422 FORA_DA_JANELA (R12) (16.0011ms)\n  ✔ lidoEm 19:30:01 com envio depois do fechamento devolve 422 FORA_DA_JANELA (R12) (19.2217ms)\n  ✔ lidoEm no futuro não é erro: devolve 201 e grava o instante do envio como lidoEm (R12) (10.7617ms)\n  ✔ lidoEm que não é string ISO válida devolve 422 DADOS_INVALIDOS (18.4229ms)\n  ✔ lidoEm de tipo errado devolve 422 DADOS_INVALIDOS (13.8422ms)\n  ✔ reenvio do mesmo lidoEm devolve 200 com o mesmo id e a mesma presença (R11) (33.267ms)\n  ✔ código errado com envio tardio devolve 422 SINCRONIZACAO_TARDIA, antes de CODIGO_INVALIDO (R16) (14.7569ms)\n  ✔ não inscrito com envio tardio devolve 403 NAO_INSCRITO, antes de SINCRONIZACAO_TARDIA (R16) (9.8269ms)\n  ✔ atividade cancelada antes do envio: presença lida antes do cancelamento devolve 403 NAO_INSCRITO (R18) (17.7677ms)\n  ✔ atividade cancelada depois da presença registrada: reenvio devolve 200 com a mesma presença (R18) (16.9861ms)\n✔ F3 — Presença offline (lidoEm) (379.7838ms)\n▶ F4 — Presença manual\n  ✔ manual válida às 20:00 por org-ana para p-carla confirmada devolve 201 com origem manual e justificativa gravada (R10, R15) (204.1933ms)\n  ✔ manual aceita em 18:45:00 (inicio − 15 min, borda da abertura da janela manual) (24.4638ms)\n  ✔ manual recusada em 18:44:59 (inicio − 15 min − 1 s) com 422 FORA_DA_JANELA (18.7164ms)\n  ✔ manual aceita às 00:00:00 de 20/10 (fim + 2 h, borda do fechamento da janela manual) (30.2474ms)\n  ✔ manual recusada às 00:00:01 de 20/10 (fim + 2 h + 1 s) com 422 FORA_DA_JANELA (24.116ms)\n  ✔ manual sem justificativa devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (20.2738ms)\n  ✔ manual com justificativa vazia devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (20.897ms)\n  ✔ manual com justificativa só de espaços devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (10.0546ms)\n  ✔ manual com justificativa de 3 caracteres devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (9.4355ms)\n  ✔ manual com justificativa de tipo errado devolve 422 DADOS_INVALIDOS (R13) (9.6333ms)\n  ✔ manual sem participanteId devolve 422 DADOS_INVALIDOS (13.6027ms)\n  ✔ manual para participante em_espera devolve 403 NAO_INSCRITO (R8) (10.5431ms)\n  ✔ manual para participanteId desconhecido devolve 403 NAO_INSCRITO (R8) (6.35ms)\n  ✔ com 5 confirmadas, a 1ª manual devolve 201 e a 2ª (para outro participante) devolve 422 LIMITE_DE_MANUAIS (R14) (18.4082ms)\n  ✔ com 1 confirmada, a 1ª manual ainda devolve 201 (10% arredondando para cima, R14) (9.2605ms)\n  ✔ manual repetida para quem já tem presença QR devolve 200 com a mesma presença (R11 antes de R8/R15) (17.9649ms)\n  ✔ manual repetida para quem já tem presença manual devolve 200 com a mesma presença, antes do limite (R17) (7.6501ms)\n  ✔ em_espera com justificativa curta devolve 422 JUSTIFICATIVA_OBRIGATORIA, antes de NAO_INSCRITO (R17) (6.3314ms)\n  ✔ limite atingido e fora da janela devolve 422 FORA_DA_JANELA, antes de LIMITE_DE_MANUAIS (R17) (17.8372ms)\n  ✔ participante em POST /encontros/:id/presencas/manual devolve 403 SOMENTE_ORGANIZACAO (R22) (3.961ms)\n  ✔ quem já tem presença manual, com justificativa curta, recebe 422 JUSTIFICATIVA_OBRIGATORIA — justificativa vem antes da presença existente (R17) (5.7422ms)\n✔ F4 — Presença manual (503.5346ms)\n▶ F5 — Lista de presenças\n  ✔ GET sem nenhuma presença registrada devolve 200 com lista vazia (R19) (138.6053ms)\n  ✔ p-carla QR 19:03:45 e p-diego manual 20:00 → lista com 2, p-carla antes de p-diego, com os campos do contrato (R19) (64.589ms)\n  ✔ duas presenças com o mesmo registradaEm ficam em ordem crescente por id (R19) (53.2987ms)\n  ✔ presença registrada às 18:47 continua na lista após cancelar a atividade às 18:50 (R24) (30.0244ms)\n  ✔ participante em GET /encontros/:id/presencas devolve 403 SOMENTE_ORGANIZACAO (R22) (11.0553ms)\n  ✔ GET de encontro inexistente devolve 404 NAO_ENCONTRADO (R22) (4.6266ms)\n  ✔ DELETE e PATCH de presença devolvem 404 NAO_ENCONTRADO em JSON — não há rota de edição nem apagamento (R20) (18.3879ms)\n  ✔ POST /encontros/:id/saidas devolve 404 NAO_ENCONTRADO em JSON — não há rota de saída (R21) (8.2951ms)\n✔ F5 — Lista de presenças (340.9511ms)\n▶ F3 — dados iniciais e GET /salas\n  ✔ GET /salas com X-Usuario: p-carla retorna 200 com as 4 salas iniciais (118.0709ms)\n  ✔ GET /salas sem X-Usuario devolve 401 USUARIO_DESCONHECIDO (26.7204ms)\n  ✔ GET /salas com X-Usuario inexistente devolve 401 USUARIO_DESCONHECIDO (10.1654ms)\n✔ F3 — dados iniciais e GET /salas (167.8064ms)\nℹ tests 178\nℹ suites 22\nℹ pass 178\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2254.2244\n",
+      "metadata": {
+       "output": "\n> semana-academica-api@0.1.0 test\n> node --test test/*.test.js\n\n▶ F2 — validações da criação\n  ✔ recusa quantidade de encontros fora do limite por tipo (101.7161ms)\n  ✔ recusa encontro fora da janela ou atravessando a meia-noite, mas aceita qualquer horário (30.193ms)\n  ✔ recusa encontros da mesma atividade que se sobrepõem ou se tocam (16.1734ms)\n  ✔ recusa encontro com duração fora de 1h a 4h inclusive (13.7362ms)\n  ✔ recusa vagas 0, negativa ou fracionária como DADOS_INVALIDOS (8.4097ms)\n  ✔ prioriza QUANTIDADE_DE_ENCONTROS sobre ENCONTRO_INVALIDO (4.7182ms)\n✔ F2 — validações da criação (196.9344ms)\n▶ F3 — vagas e conflito de sala\n  ✔ recusa vagas acima da capacidade da sala e aceita lotar até a capacidade (102.0702ms)\n  ✔ recusa outra atividade na mesma sala a menos de 15 min do fim de um encontro (26.1516ms)\n  ✔ cancelar atividade libera a sala para outra atividade no mesmo horário (13.1637ms)\n  ✔ PATCH elevando vagas além da capacidade devolve 422 VAGAS_ACIMA_DA_CAPACIDADE (49.2696ms)\n  ✔ prioriza ENCONTRO_INVALIDO sobre VAGAS_ACIMA_DA_CAPACIDADE e esta sobre CONFLITO_DE_SALA (7.0901ms)\n✔ F3 — vagas e conflito de sala (208.9759ms)\n▶ F4 — alterar atividade\n  ✔ PATCH aceita só titulo e vagas; tipo/salaId/encontros/campo fora devolvem CAMPO_NAO_EDITAVEL (132.4728ms)\n  ✔ PATCH com o 1º encontro já começado pelo relógio devolve 422 CAMPO_NAO_EDITAVEL (48.1187ms)\n  ✔ PATCH em atividade cancelada devolve ATIVIDADE_CANCELADA, vencendo CAMPO_NAO_EDITAVEL (12.7798ms)\n  ✔ prioriza CAMPO_NAO_EDITAVEL sobre VAGAS_ACIMA_DA_CAPACIDADE no PATCH (10.1139ms)\n  ✔ PATCH não muda sala nem encontros, e os ids enc_ continuam os mesmos (29.3502ms)\n  ✔ titulo aceita string vazia, um caractere e duplicado; PATCH também (15.6548ms)\n✔ F4 — alterar atividade (262.5741ms)\n▶ F5 — cancelamento e situação\n  ✔ só se cancela antes do início; no instante exato ou depois é ATIVIDADE_JA_INICIADA (196.3544ms)\n  ✔ cancelar de novo uma atividade cancelada devolve 422 ATIVIDADE_CANCELADA (13.0997ms)\n  ✔ relógio no início do 1º encontro mostra em_andamento; 1 min antes, prevista (27.4301ms)\n  ✔ relógio no fim do último encontro mostra encerrada; 1 min antes, em_andamento (12.6186ms)\n  ✔ cancelada prevalece sobre o relógio e a leitura devolve 200 com situacao cancelada (12.6701ms)\n  ✔ atividade cancelada não pode ser alterada nem cancelada de novo, e mantém os calculados (32.9573ms)\n✔ F5 — cancelamento e situação (310.0668ms)\n▶ F6 — listagem e filtros\n  ✔ listagem ordena pelo início do 1º encontro, desempatando por titulo (172.2328ms)\n  ✔ atividade cancelada continua na listagem e aparece no filtro de dia (23.4483ms)\n  ✔ ?dia retorna quem tem encontro naquele dia do fuso de Brasília (49.7663ms)\n  ✔ ?dia e ?tipo combinam em AND (10.9617ms)\n  ✔ filtro com valor inválido devolve 422 DADOS_INVALIDOS (4.8726ms)\n✔ F6 — listagem e filtros (274.1966ms)\n▶ F1 — criar e ler atividade\n  ✔ POST /atividades com org-ana e corpo válido devolve 201 com a Atividade (188.3865ms)\n  ✔ POST /atividades devolve ocupadas 0, vagasRestantes igual a vagas e emEspera 0 (7.7836ms)\n  ✔ POST ignorando cargaHorariaMinutos enviado no corpo e devolvendo a soma (25.8853ms)\n  ✔ POST soma 90+75 minutos em 165, sem arredondamento (8.0273ms)\n  ✔ POST /atividades com participante devolve 403 SOMENTE_ORGANIZACAO (17.2483ms)\n  ✔ GET /atividades com participante devolve 200 com a atividade criada (11.8009ms)\n  ✔ GET /atividades/:id com org-ana devolve 200 com a atividade criada (7.1551ms)\n  ✔ GET /atividades/:id em id inexistente devolve 404 NAO_ENCONTRADO (9.0174ms)\n  ✔ POST /atividades sem titulo devolve 422 DADOS_INVALIDOS (10.4709ms)\n  ✔ POST /atividades com tipo \"oficina\" devolve 422 DADOS_INVALIDOS (3.5657ms)\n  ✔ POST /atividades com salaId inexistente devolve 404 NAO_ENCONTRADO (3.2848ms)\n  ✔ POST /_teste/reset apaga a atividade criada e devolve os dados iniciais intactos (11.3286ms)\n✔ F1 — criar e ler atividade (320.15ms)\n▶ F1 — criar, ler e listar inscrição\n  ✔ POST /atividades/:id/inscricoes com vaga devolve 201 com Inscricao confirmada completa (166.7145ms)\n  ✔ POST /atividades/:id/inscricoes com organizacao devolve 403 SOMENTE_PARTICIPANTE mesmo em atividade inexistente (5.4183ms)\n  ✔ POST /atividades/:id/inscricoes em atividade inexistente devolve 404 NAO_ENCONTRADO (16.0904ms)\n  ✔ segunda inscricao da mesma pessoa na mesma atividade devolve 409 JA_INSCRITO (11.3214ms)\n  ✔ GET /inscricoes com participante devolve so as proprias e com filtro atividadeId (27.8104ms)\n  ✔ GET /inscricoes/:id de outro participante devolve 200 com a inscricao alheia (7.905ms)\n  ✔ cancelar ou confirmar inscricao de outro participante devolve 404 NAO_ENCONTRADO (10.1489ms)\n  ✔ GET /inscricoes/:id inexistente devolve 404 NAO_ENCONTRADO (3.199ms)\n  ✔ organizacao nas tres escritas de M2 devolve 403 SOMENTE_PARTICIPANTE (9.6875ms)\n✔ F1 — criar, ler e listar inscrição (273.8385ms)\n▶ F2 — lista de espera\n  ✔ inscricao sem vaga nasce em_espera com posicaoNaEspera em ordem de chegada (107.6167ms)\n  ✔ cancelar em_espera tira da fila e reindexa os demais, no mesmo instante criado (32.0805ms)\n  ✔ quem cancelou pode se reinscrever e entra no fim da fila (16.1059ms)\n✔ F2 — lista de espera (178.6408ms)\n▶ F3 — fechamento e recusas do POST\n  ✔ inscrever em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (124.2272ms)\n  ✔ inscricoes fecham 30 min antes do 1o encontro: 18h29 aceita, 18h30 inclusive recusa (46.8019ms)\n  ✔ em_andamento e encerrada tambem recusam com INSCRICOES_ENCERRADAS (42.1518ms)\n  ✔ encontro sobreposto com confirmada devolve 409 CONFLITO_DE_HORARIO (36.4049ms)\n  ✔ encontro que apenas encosta (fim de um = inicio do outro) nao conflita (11.3252ms)\n  ✔ so colide com em_espera nao bloqueia: inscricao nova em horario do em_espera vira confirmada (18.2363ms)\n  ✔ colisao só no 2o encontro de atividade multiencontro devolve conflito (24.0767ms)\n  ✔ 4o minicurso com vaga quando ja ocupa 3 devolve 422 LIMITE_DE_MINICURSOS (42.4671ms)\n  ✔ 4o minicurso sem vaga nao e recusado no limite: nasce em_espera (27.319ms)\n  ✔ 4o palestra com vaga nao conta para o limite de minicursos (24.1421ms)\n  ✔ com 1 dos 3 minicursos cancelado, o 4o com vaga nasce confirmada (21.6416ms)\n  ✔ atividade cancelada vence encerrada na ordem da regra R6 (10.5503ms)\n  ✔ encerrada vence ja_inscrito: ja ativo em atividade fechada recusa com INSCRICOES_ENCERRADAS (6.9924ms)\n✔ F3 — fechamento e recusas do POST (453.077ms)\n▶ F4 — convocacao e expiracao\n  ✔ cancelar confirmada libera vaga e o 1o da fila ja aparece convocado sem outro acesso (152.6162ms)\n  ✔ PATCH aumentando vagas libera vaga e promove o 1o da fila (18.6724ms)\n  ✔ convocadaAte nunca passa do fechamento das inscricoes (21.479ms)\n  ✔ convocacao vencida expira em cascata e o praco do proximo conta do vencimento anterior (58.634ms)\n  ✔ expirada pode se reinscrever e entra no fim da fila (30.5859ms)\n✔ F4 — convocacao e expiracao (294.2637ms)\n▶ F5 — confirmacao\n  ✔ confirmar convocada no prazo devolve 200 com confirmada e campos null (174.1439ms)\n  ✔ confirmar em_espera devolve 422 SEM_CONVOCACAO (15.0225ms)\n  ✔ confirmar convocada vencida devolve 422 CONVOCACAO_EXPIRADA (25.6508ms)\n  ✔ confirmar exatamente em convocadaAte e aceito (prazo ate X inclui X) (13.5652ms)\n  ✔ conflito criado depois recusa a confirmacao com 409 e a convocacao continua valida (34.986ms)\n  ✔ confirmar o 4o minicurso devolve 422 LIMITE_DE_MINICURSOS e segue convocada (31.9479ms)\n  ✔ convocada vencida com conflito recusa CONVOCACAO_EXPIRADA, 1a condicao da ordem (13.7301ms)\n  ✔ convocada com novo conflito E 4o minicurso recusa CONFLITO_DE_HORARIO, antes do limite (33.0655ms)\n✔ F5 — confirmacao (354.966ms)\n▶ F6 — cancelamento proprio\n  ✔ 1 minuto antes do inicio o cancelamento devolve 200 (213.8002ms)\n  ✔ no instante exato do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (22.3907ms)\n  ✔ depois do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (48.9786ms)\n  ✔ cancelar inscricao cancelada devolve 422 INSCRICAO_INATIVA (10.3202ms)\n  ✔ cancelar inscricao expirada devolve 422 INSCRICAO_INATIVA (22.2612ms)\n  ✔ inscricao cancelada em atividade ja iniciada devolve ATIVIDADE_JA_INICIADA (prioridade) (10.3206ms)\n  ✔ cancelar convocada libera vaga e promove o proximo da fila (14.4075ms)\n✔ F6 — cancelamento proprio (361.6863ms)\n▶ F7 — atividade cancelada e campos do M1\n  ✔ cancelar atividade transforma todas as ativas em cancelada e nao promove ninguem (185.4585ms)\n  ✔ GET /atividades/:id mostra ocupadas, emEspera e vagasRestantes calculados (28.2701ms)\n  ✔ PATCH reduzindo vagas abaixo dos ocupantes devolve 409 VAGAS_ABAIXO_DOS_INSCRITOS (44.5839ms)\n  ✔ com atividade cancelada os campos continuam calculados: ocupadas 0 e emEspera 0 (36.9058ms)\n✔ F7 — atividade cancelada e campos do M1 (306.6632ms)\n▶ F4 — rotas de teste ativas com MODO_TESTE=1\n  ✔ PUT /_teste/relogio com {agora} responde 200 com o valor recebido (146.3612ms)\n  ✔ PUT /_teste/relogio com corpo não-JSON devolve 422 DADOS_INVALIDOS (14.1905ms)\n  ✔ GET /_teste/relogio retorna o último horário definido por PUT e fica parado (17.8866ms)\n  ✔ POST /_teste/reset zera o relógio em 09:00 e mantém as 4 salas (26.2291ms)\n✔ F4 — rotas de teste ativas com MODO_TESTE=1 (240.4712ms)\n▶ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404\n  ✔ GET, POST e PUT em /_teste/* devolvem 404 (22.6861ms)\n✔ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404 (27.0353ms)\n▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (133.3364ms)\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (29.6899ms)\n  ✔ atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18) (24.6912ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (199.3347ms)\n▶ F1 — Emitir o código do encontro\n  ✔ participante em GET /encontros/:id/codigo recebe 403 SOMENTE_ORGANIZACAO (142.6414ms)\n  ✔ GET /encontros/:id/codigo em encontro inexistente devolve 404 NAO_ENCONTRADO (15.7867ms)\n  ✔ GET /encontros/:id/codigo em 18:45:00 (inicio - 15 min) devolve 200 com o CodigoDoEncontro (36.4661ms)\n  ✔ GET /encontros/:id/codigo em 18:44:59 devolve 422 FORA_DA_JANELA (14.2859ms)\n  ✔ GET /encontros/:id/codigo em 19:30:00 (inicio + 30 min) devolve 200 (29.4166ms)\n  ✔ GET /encontros/:id/codigo em 19:30:01 devolve 422 FORA_DA_JANELA (16.0545ms)\n  ✔ código das 19:03 tem 6 caracteres do alfabeto, trocaEm 19:04:00 e validoAte 19:05:00 (12.3883ms)\n  ✔ dois GET /encontros/:id/codigo no mesmo minuto devolvem o mesmo código, trocaEm e validoAte (11.8505ms)\n  ✔ ao cruzar o minuto o código gira e trocaEm aponta o próximo hh:mm:00 (9.5317ms)\n  ✔ GET /encontros/:id/codigo em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (13.0771ms)\n  ✔ atividade cancelada fora da janela devolve ATIVIDADE_CANCELADA antes de FORA_DA_JANELA (11.6412ms)\n  ✔ PATCH de título/vagas não muda o código nem a validade no mesmo minuto (10.854ms)\n  ✔ dois encontros no mesmo minuto têm códigos diferentes (o código é do encontro, não do minuto) (13.2073ms)\n✔ F1 — Emitir o código do encontro (349.3001ms)\n▶ F2 — Presença QR online\n  ✔ organização em POST /encontros/:id/presencas recebe 403 SOMENTE_PARTICIPANTE mesmo em encontro inexistente (103.5479ms)\n  ✔ POST /encontros/:id/presencas em encontro inexistente devolve 404 NAO_ENCONTRADO (40.9233ms)\n  ✔ encontro inexistente com corpo inválido devolve 404 (existência antes do corpo) (7.4717ms)\n  ✔ POST sem codigo no corpo devolve 422 DADOS_INVALIDOS (15.2591ms)\n  ✔ POST com codigo de tipo errado devolve 422 DADOS_INVALIDOS (24.6607ms)\n  ✔ primeira presença devolve 201 com Presenca qr completa no instante do envio (17.2485ms)\n  ✔ repetir o POST devolve 200 com a mesma presença, mesmo id e mesmos instantes (18.3745ms)\n  ✔ POST sem inscrição na atividade devolve 403 NAO_INSCRITO (12.0388ms)\n  ✔ POST com inscrição em_espera devolve 403 NAO_INSCRITO (34.4244ms)\n  ✔ aceita presença em 18:45:00 (inicio - 15 min, borda da abertura) (17.7835ms)\n  ✔ recusa presença em 18:44:59 (inicio - 15 min - 1 s, fora da janela) (16.016ms)\n  ✔ aceita presença em 19:30:00 (inicio + 30 min, borda do fechamento) (18.74ms)\n  ✔ recusa presença em 19:30:01 (inicio + 30 min + 1 s, fora da janela) (16.3213ms)\n  ✔ aceita código emitido às 19:03 enviado às 19:04:59 (minuto anterior) (14.9035ms)\n  ✔ recusa código emitido às 19:03 enviado às 19:05:00 (validoAte) (13.8037ms)\n  ✔ aceita código em minúscula (9.486ms)\n  ✔ aceita código com espaço (11.4052ms)\n  ✔ recusa código com caractere fora do alfabeto com 422 CODIGO_INVALIDO (10.3552ms)\n  ✔ recusa código emitido para outro encontro com 422 CODIGO_INVALIDO (8.0002ms)\n  ✔ presença existente fora da janela devolve 200 com a mesma presença (R11 antes de R1) (14.4182ms)\n  ✔ presença existente com código errado devolve 200 com a mesma presença (R11 antes de R6/R7) (11.4287ms)\n  ✔ não inscrito, fora da janela e código válido devolve 403 NAO_INSCRITO (R8 antes de R1) (7.1021ms)\n  ✔ fora da janela com código errado devolve 422 FORA_DA_JANELA (R1 antes de R6/R7) (7.9747ms)\n✔ F2 — Presença QR online (464.9552ms)\n▶ F3 — Presença offline (lidoEm)\n  ✔ envio às 20:00 com lidoEm 19:10:30 devolve 201 com origem qr_offline, lidoEm e registradaEm 20:00 (R10, R12) (148.1977ms)\n  ✔ envio às 00:00:01 (fim + 2 h + 1 s) devolve 422 SINCRONIZACAO_TARDIA (R9) (22.2304ms)\n  ✔ envio às 00:00:00 (fim + 2 h, borda) com lidoEm 19:10:30 devolve 201 (R9) (24.4244ms)\n  ✔ lidoEm 18:44:59 com envio dentro da janela devolve 422 FORA_DA_JANELA (R12) (16.0011ms)\n  ✔ lidoEm 19:30:01 com envio depois do fechamento devolve 422 FORA_DA_JANELA (R12) (19.2217ms)\n  ✔ lidoEm no futuro não é erro: devolve 201 e grava o instante do envio como lidoEm (R12) (10.7617ms)\n  ✔ lidoEm que não é string ISO válida devolve 422 DADOS_INVALIDOS (18.4229ms)\n  ✔ lidoEm de tipo errado devolve 422 DADOS_INVALIDOS (13.8422ms)\n  ✔ reenvio do mesmo lidoEm devolve 200 com o mesmo id e a mesma presença (R11) (33.267ms)\n  ✔ código errado com envio tardio devolve 422 SINCRONIZACAO_TARDIA, antes de CODIGO_INVALIDO (R16) (14.7569ms)\n  ✔ não inscrito com envio tardio devolve 403 NAO_INSCRITO, antes de SINCRONIZACAO_TARDIA (R16) (9.8269ms)\n  ✔ atividade cancelada antes do envio: presença lida antes do cancelamento devolve 403 NAO_INSCRITO (R18) (17.7677ms)\n  ✔ atividade cancelada depois da presença registrada: reenvio devolve 200 com a mesma presença (R18) (16.9861ms)\n✔ F3 — Presença offline (lidoEm) (379.7838ms)\n▶ F4 — Presença manual\n  ✔ manual válida às 20:00 por org-ana para p-carla confirmada devolve 201 com origem manual e justificativa gravada (R10, R15) (204.1933ms)\n  ✔ manual aceita em 18:45:00 (inicio − 15 min, borda da abertura da janela manual) (24.4638ms)\n  ✔ manual recusada em 18:44:59 (inicio − 15 min − 1 s) com 422 FORA_DA_JANELA (18.7164ms)\n  ✔ manual aceita às 00:00:00 de 20/10 (fim + 2 h, borda do fechamento da janela manual) (30.2474ms)\n  ✔ manual recusada às 00:00:01 de 20/10 (fim + 2 h + 1 s) com 422 FORA_DA_JANELA (24.116ms)\n  ✔ manual sem justificativa devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (20.2738ms)\n  ✔ manual com justificativa vazia devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (20.897ms)\n  ✔ manual com justificativa só de espaços devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (10.0546ms)\n  ✔ manual com justificativa de 3 caracteres devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (9.4355ms)\n  ✔ manual com justificativa de tipo errado devolve 422 DADOS_INVALIDOS (R13) (9.6333ms)\n  ✔ manual sem participanteId devolve 422 DADOS_INVALIDOS (13.6027ms)\n  ✔ manual para participante em_espera devolve 403 NAO_INSCRITO (R8) (10.5431ms)\n  ✔ manual para participanteId desconhecido devolve 403 NAO_INSCRITO (R8) (6.35ms)\n  ✔ com 5 confirmadas, a 1ª manual devolve 201 e a 2ª (para outro participante) devolve 422 LIMITE_DE_MANUAIS (R14) (18.4082ms)\n  ✔ com 1 confirmada, a 1ª manual ainda devolve 201 (10% arredondando para cima, R14) (9.2605ms)\n  ✔ manual repetida para quem já tem presença QR devolve 200 com a mesma presença (R11 antes de R8/R15) (17.9649ms)\n  ✔ manual repetida para quem já tem presença manual devolve 200 com a mesma presença, antes do limite (R17) (7.6501ms)\n  ✔ em_espera com justificativa curta devolve 422 JUSTIFICATIVA_OBRIGATORIA, antes de NAO_INSCRITO (R17) (6.3314ms)\n  ✔ limite atingido e fora da janela devolve 422 FORA_DA_JANELA, antes de LIMITE_DE_MANUAIS (R17) (17.8372ms)\n  ✔ participante em POST /encontros/:id/presencas/manual devolve 403 SOMENTE_ORGANIZACAO (R22) (3.961ms)\n  ✔ quem já tem presença manual, com justificativa curta, recebe 422 JUSTIFICATIVA_OBRIGATORIA — justificativa vem antes da presença existente (R17) (5.7422ms)\n✔ F4 — Presença manual (503.5346ms)\n▶ F5 — Lista de presenças\n  ✔ GET sem nenhuma presença registrada devolve 200 com lista vazia (R19) (138.6053ms)\n  ✔ p-carla QR 19:03:45 e p-diego manual 20:00 → lista com 2, p-carla antes de p-diego, com os campos do contrato (R19) (64.589ms)\n  ✔ duas presenças com o mesmo registradaEm ficam em ordem crescente por id (R19) (53.2987ms)\n  ✔ presença registrada às 18:47 continua na lista após cancelar a atividade às 18:50 (R24) (30.0244ms)\n  ✔ participante em GET /encontros/:id/presencas devolve 403 SOMENTE_ORGANIZACAO (R22) (11.0553ms)\n  ✔ GET de encontro inexistente devolve 404 NAO_ENCONTRADO (R22) (4.6266ms)\n  ✔ DELETE e PATCH de presença devolvem 404 NAO_ENCONTRADO em JSON — não há rota de edição nem apagamento (R20) (18.3879ms)\n  ✔ POST /encontros/:id/saidas devolve 404 NAO_ENCONTRADO em JSON — não há rota de saída (R21) (8.2951ms)\n✔ F5 — Lista de presenças (340.9511ms)\n▶ F3 — dados iniciais e GET /salas\n  ✔ GET /salas com X-Usuario: p-carla retorna 200 com as 4 salas iniciais (118.0709ms)\n  ✔ GET /salas sem X-Usuario devolve 401 USUARIO_DESCONHECIDO (26.7204ms)\n  ✔ GET /salas com X-Usuario inexistente devolve 401 USUARIO_DESCONHECIDO (10.1654ms)\n✔ F3 — dados iniciais e GET /salas (167.8064ms)\nℹ tests 178\nℹ suites 22\nℹ pass 178\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2254.2244\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "npm test",
+      "time": {
+       "start": 1789681523481,
+       "end": 1789681526516
+      }
+     },
+     "id": "prt_0b154d9d2001QlQV4U1tNX8FoJ",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154cf8e001jP0ggduTtKbjBy"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-finish",
+     "tokens": {
+      "total": 73298,
+      "input": 354,
+      "output": 240,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 72704
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b154e8160010ohG6wGJlnIbHe",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154cf8e001jP0ggduTtKbjBy"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 80147,
+     "input": 6747,
+     "output": 184,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 73216
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681527345,
+     "completed": 1789681530770
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b154ea31001VO0lj7pJHrkd0M",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-start",
+     "id": "prt_0b154f0120016oi00uaik7driG",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154ea31001VO0lj7pJHrkd0M"
+    },
+    {
+     "type": "reasoning",
+     "text": "Full suite: 178 tests, all pass, 0 fail. Now commit with the exact message requested.\n\nLet me check git status and diff first.",
+     "time": {
+      "start": 1789681528852,
+      "end": 1789681529274
+     },
+     "id": "prt_0b154f014001EUxJSZCAAq2HVE",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154ea31001VO0lj7pJHrkd0M"
+    },
+    {
+     "type": "text",
+     "text": "Suíte completa: 178 testes, 178 pass, 0 fail. Vou conferir o git e commitar.",
+     "time": {
+      "start": 1789681529275,
+      "end": 1789681529699
+     },
+     "id": "prt_0b154f1bb001HRgxDZZ8vrieS6",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154ea31001VO0lj7pJHrkd0M"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_b5d9854b6395462facbfd82a",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "git status --short",
+       "workdir": "C:\\semana-academica"
+      },
+      "output": "?? api/test/presenca-auditoria.test.js\n",
+      "metadata": {
+       "output": "?? api/test/presenca-auditoria.test.js\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "git status --short",
+      "time": {
+       "start": 1789681529539,
+       "end": 1789681529888
+      }
+     },
+     "id": "prt_0b154f22c0010HvNvx8BBNzCuN",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154ea31001VO0lj7pJHrkd0M"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_4d4ea715408846d28f85dbad",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "git log --oneline -5",
+       "workdir": "C:\\semana-academica"
+      },
+      "output": "659418d auditorias: parecer do auditor sobre M3 (22 de 24 regras comprovadas)\n5fff15a auditoras e evidências\n7472ce0 M3-F5: GET /encontros/:id/presencas e ausência de edição, apagamento e check-out (R19, R20, R21, R22, R24)\n788ec98 M3-R17: justificativa é conferida antes da presença existente (o código fazia o inverso)\n901181b M3-F4: presença manual (R8, R13, R14, R15, R17, R22)\n",
+      "metadata": {
+       "output": "659418d auditorias: parecer do auditor sobre M3 (22 de 24 regras comprovadas)\n5fff15a auditoras e evidências\n7472ce0 M3-F5: GET /encontros/:id/presencas e ausência de edição, apagamento e check-out (R19, R20, R21, R22, R24)\n788ec98 M3-R17: justificativa é conferida antes da presença existente (o código fazia o inverso)\n901181b M3-F4: presença manual (R8, R13, R14, R15, R17, R22)\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "git log --oneline -5",
+      "time": {
+       "start": 1789681529679,
+       "end": 1789681529990
+      }
+     },
+     "id": "prt_0b154f2c7001RxBRFnDg4JtTMU",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154ea31001VO0lj7pJHrkd0M"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-finish",
+     "tokens": {
+      "total": 80147,
+      "input": 6747,
+      "output": 184,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 73216
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b154f59e001DwQs5kFwJdhIFq",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154ea31001VO0lj7pJHrkd0M"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 80443,
+     "input": 194,
+     "output": 121,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 80128
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681530775,
+     "completed": 1789681533398
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b154f797001hznOjjBUH377Gm",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-start",
+     "id": "prt_0b154fcaf001W3lnTmNwqLjSlu",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154f797001hznOjjBUH377Gm"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_304d715bc8b9403ba7149129",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "git add api/test/presenca-auditoria.test.js; if ($?) { git commit -m \"M3-R8/R18: provas que faltavam na auditoria — inscrição cancelada e expirada, manual em atividade cancelada\" }",
+       "workdir": "C:\\semana-academica"
+      },
+      "output": "warning: in the working copy of 'api/test/presenca-auditoria.test.js', LF will be replaced by CRLF the next time Git touches it\n[main 55f46fb] M3-R8/R18: provas que faltavam na auditoria — inscrição cancelada e expirada, manual em atividade cancelada\n 1 file changed, 214 insertions(+)\n create mode 100644 api/test/presenca-auditoria.test.js\n",
+      "metadata": {
+       "output": "warning: in the working copy of 'api/test/presenca-auditoria.test.js', LF will be replaced by CRLF the next time Git touches it\n[main 55f46fb] M3-R8/R18: provas que faltavam na auditoria — inscrição cancelada e expirada, manual em atividade cancelada\n 1 file changed, 214 insertions(+)\n create mode 100644 api/test/presenca-auditoria.test.js\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "git add api/test/presenca-auditoria.test.js; if ($?) { git commit -m \"M3-R8/R18: provas que faltavam na auditoria — inscrição cancelada e expirada, manual em atividade cancelada\" }",
+      "time": {
+       "start": 1789681532432,
+       "end": 1789681532778
+      }
+     },
+     "id": "prt_0b154fd05001vSB6ltjee7RAbQ",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154f797001hznOjjBUH377Gm"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-finish",
+     "tokens": {
+      "total": 80443,
+      "input": 194,
+      "output": 121,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 80128
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1550089001ScsFl6S3D9UO5M",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b154f797001hznOjjBUH377Gm"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 80780,
+     "input": 171,
+     "output": 225,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 80384
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681533403,
+     "completed": 1789681536222
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b15501db0015Ka3NoldCiQKOF",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-start",
+     "id": "prt_0b1550853001pZ1GNhh5mxvqe8",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15501db0015Ka3NoldCiQKOF"
+    },
+    {
+     "type": "tool",
+     "tool": "todowrite",
+     "callID": "call_801c977382e647dbb6ccfb1f",
+     "state": {
+      "status": "completed",
+      "input": {
+       "todos": [
+        {
+         "content": "Teste 1 (R8): inscrição cancelada → POST presencas 403 NAO_INSCRITO",
+         "priority": "high",
+         "status": "completed"
+        },
+        {
+         "content": "Teste 2 (R8): inscrição expirada → POST presencas 403 NAO_INSCRITO",
+         "priority": "high",
+         "status": "completed"
+        },
+        {
+         "content": "Teste 3 (R18): manual em atividade cancelada — quem tem presença 200, quem não tem 403",
+         "priority": "high",
+         "status": "completed"
+        },
+        {
+         "content": "Rodar npm test completo e relatar número real",
+         "priority": "high",
+         "status": "completed"
+        },
+        {
+         "content": "Commit com a mensagem pedida",
+         "priority": "high",
+         "status": "completed"
+        }
+       ]
+      },
+      "output": "[\n  {\n    \"content\": \"Teste 1 (R8): inscrição cancelada → POST presencas 403 NAO_INSCRITO\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Teste 2 (R8): inscrição expirada → POST presencas 403 NAO_INSCRITO\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Teste 3 (R18): manual em atividade cancelada — quem tem presença 200, quem não tem 403\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Rodar npm test completo e relatar número real\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  },\n  {\n    \"content\": \"Commit com a mensagem pedida\",\n    \"status\": \"completed\",\n    \"priority\": \"high\"\n  }\n]",
+      "metadata": {
+       "todos": [
+        {
+         "content": "Teste 1 (R8): inscrição cancelada → POST presencas 403 NAO_INSCRITO",
+         "status": "completed",
+         "priority": "high"
+        },
+        {
+         "content": "Teste 2 (R8): inscrição expirada → POST presencas 403 NAO_INSCRITO",
+         "status": "completed",
+         "priority": "high"
+        },
+        {
+         "content": "Teste 3 (R18): manual em atividade cancelada — quem tem presença 200, quem não tem 403",
+         "status": "completed",
+         "priority": "high"
+        },
+        {
+         "content": "Rodar npm test completo e relatar número real",
+         "status": "completed",
+         "priority": "high"
+        },
+        {
+         "content": "Commit com a mensagem pedida",
+         "status": "completed",
+         "priority": "high"
+        }
+       ],
+       "truncated": false
+      },
+      "title": "0 todos",
+      "time": {
+       "start": 1789681535564,
+       "end": 1789681535568
+      }
+     },
+     "id": "prt_0b1550854001kcVf0TgA4csxTV",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15501db0015Ka3NoldCiQKOF"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-finish",
+     "tokens": {
+      "total": 80780,
+      "input": 171,
+      "output": 225,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 80384
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1550bae001JdLexXJy5te5o1",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b15501db0015Ka3NoldCiQKOF"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1539328001cc2OjCkoLEg5wV",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 81354,
+     "input": 365,
+     "output": 349,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 80640
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789681536229,
+     "completed": 1789681540336
+    },
+    "finish": "stop",
+    "id": "msg_0b1550ce5001w9oWM2t27HwlSn",
+    "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn"
+   },
+   "parts": [
+    {
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-start",
+     "id": "prt_0b15513700017YJhfp3jh7HcUp",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1550ce5001w9oWM2t27HwlSn"
+    },
+    {
+     "type": "text",
+     "text": "Feito. `api/test/presenca-auditoria.test.js` com as 3 provas, uma por vez, todas verificadas:\n\n1. **R8 cancelada** — nasce verde: `registrarPresenca` só aceita `confirmada` (presencas.js:166), então `cancelada` cai em `NAO_INSCRITO`. Prova: inscreve 10:00, cancela 10:05, código válido 19:03:45 → 403.\n2. **R8 expirada** — nasce verde, mesma razão. Prova documenta que *convocada nunca coexiste com a janela* (convoca vence no fechamento, início − 30 min; janela abre em início − 15 min): vagas 1, carla em_espera, diego cancela 18:00 → carla `convocada` até 18:30 e via GET vira `expirada` antes do POST → 403.\n3. **R18 manual** — nasce verde: checagem de presença existente vem antes do `NAO_INSCRITO` (R17), e o cancelamento da atividade cancela inscrições. Manual 18:47 → 201; cancela atividade 18:50; 18:55 repetição → 200 mesmo id, p-carla sem presença → 403.\n\nNada de spec, código ou teste existente foi alterado. `npm test`: **178 pass, 0 fail**. Commit `55f46fb` com a mensagem pedida.",
+     "time": {
+      "start": 1789681537906,
+      "end": 1789681539712
+     },
+     "id": "prt_0b1551372001SilBlV2mTqbQvj",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1550ce5001w9oWM2t27HwlSn"
+    },
+    {
+     "reason": "stop",
+     "snapshot": "e719984cc6d71e25d8e0c21055bcd242f0f73d5c",
+     "type": "step-finish",
+     "tokens": {
+      "total": 81354,
+      "input": 365,
+      "output": 349,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 80640
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1551bdf001G001qXmWlgrzjH",
+     "sessionID": "ses_f4eac6ce6ffeXnm9zBvSgqyeQn",
+     "messageID": "msg_0b1550ce5001w9oWM2t27HwlSn"
+    }
+   ]
+  }
+ ]
+}

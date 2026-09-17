@@ -1,0 +1,582 @@
+{
+ "info": {
+  "id": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+  "slug": "cosmic-lagoon",
+  "projectID": "cbf5108e60a26b3873bb8ce01325422ff122ab1c",
+  "directory": "C:\\semana-academica",
+  "path": "",
+  "title": "New session - 2026-09-17T17:26:37.413Z",
+  "agent": "build",
+  "model": {
+   "id": "big-pickle",
+   "providerID": "opencode"
+  },
+  "version": "1.18.31",
+  "summary": {
+   "additions": 0,
+   "deletions": 0,
+   "files": 0
+  },
+  "cost": 0,
+  "tokens": {
+   "input": 38658,
+   "output": 20440,
+   "reasoning": 0,
+   "cache": {
+    "read": 72704,
+    "write": 0
+   }
+  },
+  "time": {
+   "created": 1789665997413,
+   "updated": 1789666140584
+  }
+ },
+ "messages": [
+  {
+   "info": {
+    "role": "user",
+    "time": {
+     "created": 1789665997429
+    },
+    "agent": "build",
+    "model": {
+     "providerID": "opencode",
+     "modelID": "big-pickle"
+    },
+    "summary": {
+     "diffs": [
+      {
+       "file": "specs/M3-presenca.md",
+       "patch": "Index: specs/M3-presenca.md\n===================================================================\n--- specs/M3-presenca.md\t\n+++ specs/M3-presenca.md\t\n@@ -0,0 +1,266 @@\n+# Spec — M3 Presença por QR\n+\n+## 1. Objetivo\n+\n+Registrar e consultar presença nos encontros da Semana Acadêmica por QR code.\n+A organização emite, por encontro, um código de 6 caracteres que gira a cada\n+minuto; o participante o lê — online ou offline — dentro da janela do encontro e\n+ganha uma `Presenca`. A organização também pode registrar presença manual com\n+justificativa. A janela de presença é fixa e imutável: abre 15 minutos antes do\n+`inicio` e fecha 30 minutos depois (30 min depois do `fim`, no caso de manual).\n+\n+Cada regra cita a pergunta (P-xx) da entrevista `entrevistas/M3-presenca.md` que\n+a originou e a regra do documento (RN-xxx). Dependências de estado de inscrição e\n+de encontro vêm das specs de M2 e M1.\n+\n+## 2. Fora de escopo\n+\n+- Correção e apagamento de presença — não há rota de edição/delete. (P-18a, contrato §5)\n+- Check-out (saída) — não há rota de saída em M3. (P-18b, contrato §5)\n+- Cálculo de frequência — pertence a RN-404/RN-504 (frequência e certificados). (P-18d)\n+- Notificação ao participante — M3 não envia notificação. (P-18d)\n+- Fila offline no servidor — a fila offline vive só na tela/app; o servidor não a guarda. (P-18d)\n+- Alteração de encontros e troca de sala — encontros e sala não mudam após a criação da\n+  atividade; só título e vagas são editáveis. (P-20, P-20a, RN-110)\n+- Presença para quem não é participante — rotas exigem o perfil do contrato (R22). (P-18c)\n+\n+## 3. Modelo\n+\n+### 3.1 CodigoDoEncontro\n+\n+| Campo | Tipo | Origem |\n+|---|---|---|\n+| encontroId | string | calculado — id do encontro vindo de M1 |\n+| codigo | string | calculado — 6 caracteres do alfabeto de R7 |\n+| trocaEm | datetime | calculado — próximo `hh:mm:00` do relógio |\n+| validoAte | datetime | calculado — `trocaEm` + 1 minuto |\n+\n+### 3.2 Presenca\n+\n+| Campo | Tipo | Origem |\n+|---|---|---|\n+| id | string | gerado — `pre_` + 8 hex minúsculos (contrato §1) |\n+| encontroId | string | derivado da rota (`/encontros/:id/`) |\n+| participanteId | string | derivado — `X-Usuario` na rota de QR; `participanteId` do corpo na manual |\n+| origem | string | calculado — `qr` \\| `qr_offline` \\| `manual` (R10) |\n+| lidoEm | datetime | informado (opcional) ou = instante do envio quando ausente/futuro |\n+| registradaEm | datetime | calculado — instante do envio |\n+| justificativa | string | informado — só na manual; `null` caso contrário |\n+\n+## 4. Endpoints\n+\n+| Método | Rota | Quem | Sucesso |\n+|---|---|---|---|\n+| GET | `/encontros/:id/codigo` | organização | 200 `CodigoDoEncontro` |\n+| POST | `/encontros/:id/presencas` | participante | 201 `Presenca` na primeira vez; 200 `Presenca` depois (repetição) |\n+| POST | `/encontros/:id/presencas/manual` | organização | 201 `Presenca` na primeira vez; 200 `Presenca` depois |\n+| GET | `/encontros/:id/presencas` | organização | 200 `[Presenca]` |\n+\n+```jsonc\n+// POST /encontros/:id/presencas — entrada\n+{ \"codigo\": \"K7M2QX\", \"lidoEm\": \"…\" }        // lidoEm é opcional (contrato §5)\n+\n+// POST /encontros/:id/presencas/manual — entrada\n+{ \"participanteId\": \"p-carla\", \"justificativa\": \"…\" }   // justificativa ausente também é JUSTIFICATIVA_OBRIGATORIA\n+```\n+\n+## 5. Regras\n+\n+R1. A janela de presença abre 15 minutos antes do `inicio`, borda incluída.\n+`inicio` 19:00 → 18:45:00 aceita; 18:44:59 → 422 `FORA_DA_JANELA`. (P-01, RN-301)\n+\n+R2. A janela de presença fecha 30 minutos depois do `inicio` (não do `fim`),\n+borda incluída. `inicio` 19:00 → 19:30:00 aceita; 19:30:01 → 422 `FORA_DA_JANELA`.\n+(P-02, RN-301)\n+\n+R3. `GET /encontros/:id/codigo` usa a mesma janela da presença: fora dela →\n+422 `FORA_DA_JANELA`, e a organização nem obtém o código. Atividade cancelada →\n+422 `ATIVIDADE_CANCELADA`. (P-03, RN-302)\n+\n+R4. O código gira a cada minuto, alinhado ao relógio do modo de teste: de\n+`hh:mm:00` a `hh:mm:59` vale um código, e `trocaEm` aponta o próximo `hh:mm:00`.\n+Dentro do mesmo minuto, o código, o `trocaEm` e o `validoAte` são sempre os\n+mesmos; ao cruzar o minuto, giram. (P-04, P-29, RN-303)\n+\n+R5. Um código emitido vale para o minuto atual e o anterior: `validoAte` =\n+`trocaEm` + 1 minuto. Ex.: código das 19:03 → `trocaEm` 19:04:00, `validoAte`\n+19:05:00; envio 19:04:59 aceito; no instante 19:05:00 → 422 `CODIGO_INVALIDO`.\n+(P-05, RN-304)\n+\n+R6. Código emitido para um encontro, submetido em outro → 422 `CODIGO_INVALIDO`.\n+(P-19, RN-304)\n+\n+R7. Alfabeto do código: `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (tem L; não tem 0,\n+O, 1, I). O código emitido tem 6 caracteres desse alfabeto (contrato §5). A\n+leitura aceita minúscula e ignora espaço. Código ausente ou de tipo errado →\n+422 `DADOS_INVALIDOS`; caractere fora do alfabeto → 422 `CODIGO_INVALIDO`.\n+(P-09, RN-305)\n+\n+R8. Só participante com inscrição `confirmada` registra presença, na rota de QR\n+ou na manual. `em_espera`, `convocada`, `cancelada` ou sem inscrição →\n+403 `NAO_INSCRITO`. O status da inscrição é o da **spec de M2** (P-31). (P-13,\n+P-26, P-31, RN-306)\n+\n+R9. O envio de um `lidoEm` é aceito até 2 horas depois do `fim`, borda incluída,\n+contando do `fim` (não do `lidoEm`). `fim` 22:00 → envio 00:00:00 aceito;\n+00:00:01 → 422 `SINCRONIZACAO_TARDIA`. (P-06, RN-310)\n+\n+R10. `origem` da presença: `qr` = lida e enviada na hora (sem `lidoEm`);\n+`qr_offline` = veio com `lidoEm`; `manual` = rota manual. (P-10, P-12, RN-315,\n+RN-309)\n+\n+R11. Presença já registrada naquele encontro → 200 com a mesma presença, mesmo\n+`id`, sem criar segunda. A repetição é conferida **antes** de não inscrito, janela\n+e código: com presença existente, mesmo fora da janela ou com código errado → 200.\n+Reenvio offline do mesmo `lidoEm` → 200 com a mesma presença. (P-11, P-27,\n+RN-307, RN-314)\n+\n+R12. Com `lidoEm`, a janela (R1/R2) e o código (R5) são conferidos no instante\n+da leitura; sem `lidoEm`, no instante do envio. A sincronização (R9) é sempre\n+conferida no envio. Ex.: `lidoEm` = `inicio` − 16 min → 422 `FORA_DA_JANELA`.\n+`lidoEm` no futuro não é erro — vale o instante do envio, origem continua\n+`qr_offline`. (P-21, P-24, P-12, RN-308, RN-301, RN-309)\n+\n+R13. Na presença manual, a `justificativa` tem no mínimo 10 caracteres. Ausente,\n+vazia ou menor que 10 → 422 `JUSTIFICATIVA_OBRIGATORIA`; tipo errado →\n+422 `DADOS_INVALIDOS`. É a primeira regra de recurso conferida na manual. (P-14,\n+RN-311, RN-314)\n+\n+R14. Limite de presenças manuais por encontro: 10% das inscrições confirmadas da\n+atividade, arredondando para cima; a tentativa N+1ª → 422 `LIMITE_DE_MANUAIS`.\n+Ex.: 20 confirmadas → 2; 21 → 3; 5 → 1. (P-07, RN-313)\n+\n+R15. A janela da manual vai da abertura da janela (15 min antes do `inicio`) até\n+2 horas depois do `fim` — é mais longa que a janela da presença automática.\n+(P-15, RN-312)\n+\n+R16. Ordem das verificações da presença automática (`POST /encontros/:id/presencas`):\n+404 `NAO_ENCONTRADO` → presença existente (200) → não inscrito (`NAO_INSCRITO`) →\n+sincronização tardia (`SINCRONIZACAO_TARDIA`) → fora da janela (`FORA_DA_JANELA`)\n+→ código inválido (`CODIGO_INVALIDO`). (P-08, P-22, P-23, RN-314)\n+\n+R17. Ordem das verificações da presença manual (`POST /encontros/:id/presencas/manual`):\n+corpo (422 `DADOS_INVALIDOS`) → justificativa (`JUSTIFICATIVA_OBRIGATORIA`) →\n+presença existente (200) → não inscrito (`NAO_INSCRITO`) → fora da janela\n+(`FORA_DA_JANELA`) → limite de manuais (`LIMITE_DE_MANUAIS`). (P-14, P-26,\n+RN-311, RN-314)\n+\n+R18. Com atividade cancelada, presença QR ou manual: o cancelamento cancela as\n+inscrições (spec de M2 — RN-217), então ninguém está `confirmada` →\n+403 `NAO_INSCRITO`, salvo quem já tem presença, que recebe 200. Código em\n+atividade cancelada → `ATIVIDADE_CANCELADA` (R3). (P-16, P-30, RN-302, RN-217,\n+RN-306, RN-307)\n+\n+R19. `GET /encontros/:id/presencas` retorna a lista em ordem crescente de\n+`registradaEm`; empate por `id`. (P-17)\n+\n+R20. Não há rota de edição nem de apagamento de presença — tentativa →\n+404 `NAO_ENCONTRADO`. (P-18a, contrato §5)\n+\n+R21. Não há check-out: nenhuma rota de saída entre as rotas de M3. (P-18b,\n+contrato §5)\n+\n+R22. Perfil das rotas: `GET /encontros/:id/codigo`, `POST /encontros/:id/presencas/manual`\n+e `GET /encontros/:id/presencas` são de organização → participante recebe\n+403 `SOMENTE_ORGANIZACAO`; `POST /encontros/:id/presencas` é de participante →\n+organização recebe 403 `SOMENTE_PARTICIPANTE`. (P-18c, contrato §5)\n+\n+R23. Encontros e sala não mudam depois de criada a atividade — só título e vagas\n+(PATCH de M1). A janela de um encontro é fixa por construção e nunca muda nem\n+invalida códigos já emitidos. (P-20, P-20a, RN-110)\n+\n+R24. Presenças continuam listadas depois do cancelamento da atividade: presença é\n+histórico e não há apagamento (R20). Cancelar cancela inscrições, não presenças.\n+(P-25, RN-217, P-18a)\n+\n+## 6. Critérios de aceite\n+\n+1. (R1, R16) Relógio 18:44:59, `inicio` 19:00 → POST `/encontros/:id/presencas`\n+   com código válido → 422 `FORA_DA_JANELA`; em 18:45:00 → 201.\n+2. (R2, R16) Relógio 19:30:00 → 201; 19:30:01 → 422 `FORA_DA_JANELA`.\n+3. (R3) `GET /encontros/:id/codigo` em 18:45:00 (15 min antes do `inicio`) → 200;\n+   em 18:44:59 → 422 `FORA_DA_JANELA`; atividade cancelada → 422 `ATIVIDADE_CANCELADA`.\n+4. (R4, P-29) Dois `GET` no mesmo minuto → mesmo `codigo`, `trocaEm` e `validoAte`;\n+   cruzar o minuto → `trocaEm` = próximo `hh:mm:00` e código novo.\n+5. (R5) Código das 19:03; envio 19:04:59 → 201; envio 19:05:00 → 422 `CODIGO_INVALIDO`.\n+6. (R6) Código emitido para `enc_1`, enviado em `enc_2` → 422 `CODIGO_INVALIDO`.\n+7. (R7) Código em minúscula → 201; com espaço → 201; um dos caracteres proibidos\n+   (0, O, 1, I) no lugar → 422 `CODIGO_INVALIDO`; `codigo` ausente →\n+   422 `DADOS_INVALIDOS`.\n+8. (R8, R16) Participante com inscrição `em_espera`, `convocada` ou `cancelada`,\n+   ou sem inscrição → 403 `NAO_INSCRITO`; `confirmada` → 201. (status da spec de M2)\n+9. (R9, R12) `lidoEm` 19:10 (dentro da janela), envio 23:59 (= `fim` 22:00 + 2h)\n+   → 201; envio 00:00:01 → 422 `SINCRONIZACAO_TARDIA`.\n+10. (R10) POST sem `lidoEm` → `origem` `qr`; com `lidoEm` → `qr_offline`; rota\n+    manual → `manual`.\n+11. (R11) Repetir POST → 200 com o mesmo `id`; presença existente + fora da janela\n+    → 200; presença existente + código errado → 200; reenvio com o mesmo `lidoEm`\n+    → 200 com o mesmo `id`, e a lista tem uma só presença.\n+12. (R12) `lidoEm` = envio + 1 min → 201, grava o instante do envio, origem\n+    `qr_offline`; `lidoEm` = `inicio` − 16 min → 422 `FORA_DA_JANELA`.\n+13. (R13) Manual com `justificativa` ausente, vazia ou `\"abc\"` →\n+    422 `JUSTIFICATIVA_OBRIGATORIA`; tipo errado → 422 `DADOS_INVALIDOS`;\n+    `\"justificativa de 10+\"` → segue.\n+14. (R14) `N` = teto(10% das confirmadas); N manuais aceitas; a N+1ª →\n+    422 `LIMITE_DE_MANUAIS`.\n+15. (R15) Manual em 20:00 (após 19:30, dentro de `fim` 22:00 + 2h) → 201; após\n+    `fim` + 2h → 422 `FORA_DA_JANELA`.\n+16. (R16) Fora da janela + código errado → 422 `FORA_DA_JANELA`; não inscrito +\n+    fora da janela + código válido → 403 `NAO_INSCRITO`; código errado + envio\n+    tardio → 422 `SINCRONIZACAO_TARDIA`; encontro inexistente → 404 `NAO_ENCONTRADO`.\n+17. (R17) Manual de participante `em_espera` com justificativa curta →\n+    422 `JUSTIFICATIVA_OBRIGATORIA` (justificativa primeiro); com justificativa\n+    válida → 403 `NAO_INSCRITO`; `em_espera` sem presença → `NAO_INSCRITO`.\n+18. (R18) Cancelar a atividade; POST de quem já tem presença → 200; de quem não\n+    tem → 403 `NAO_INSCRITO`; `GET /encontros/:id/codigo` → 422 `ATIVIDADE_CANCELADA`.\n+19. (R19) Duas presenças → lista em ordem crescente de `registradaEm`; empate →\n+    ordem por `id`.\n+20. (R20, R21) Tentar rota de edição/apagamento de presença ou de check-out →\n+    404 `NAO_ENCONTRADO`.\n+21. (R22) Organização em `POST /encontros/:id/presencas` → 403 `SOMENTE_PARTICIPANTE`;\n+    participante em `GET /encontros/:id/codigo` → 403 `SOMENTE_ORGANIZACAO`.\n+22. (R23) Emitido um código e feito PATCH de título/vagas em M1, `GET` no mesmo\n+    minuto → mesmo código, janela e validade inalterados.\n+23. (R24) Registrar presença; cancelar a atividade; `GET /encontros/:id/presencas`\n+    → a presença continua na lista.\n+\n+## 7. Como isto será verificado\n+\n+Testes HTTP diretos, chamando a API por `fetch` via `node --test`, sem rota fora\n+do contrato. Cada teste sobe a API (ou usa instância rodando com `MODO_TESTE=1`),\n+faz `POST /_teste/reset`, anda o relógio com `PUT /_teste/relogio` e valida status\n+e corpo (`erro`, `origem`, `id`, ordem da lista). Os testes dependem de M1 e M2\n+para criar atividade/encontros e inscrições com os mesmos `POST` do contrato — a\n+costura é a HTTP, a mesma que o juiz usa.\n+\n+## 8. Fatias de entrega\n+\n+Dependências transversais: M0 (identificação, relógio, formato de erro) e M1\n+(atividades e encontros). A partir de F2, também M2 (inscrições e `confirmacao`).\n+\n+**F1 — Emitir o código do encontro** (R3, R4, R5, R7 emitido, R22 parcial, R23)\n+Implementar `GET /encontros/:id/codigo`: código de 6 caracteres do alfabeto de R7,\n+mesmo código dentro do minuto, giro ao cruzar o minuto, `trocaEm` e `validoAte`,\n+`FORA_DA_JANELA`, `ATIVIDADE_CANCELADA` e `SOMENTE_ORGANIZACAO`. Depende de M1\n+para existir um encontro.\n+\n+**F2 — Presença QR online** (R1, R2, R7 leitura, R8, R11, R16, R22)\n+Implementar `POST /encontros/:id/presencas` sem `lidoEm`: 201 na primeira vez,\n+janela (R1/R2), código válido e alfabeto (R5/R7), inscrição confirmada (R8),\n+repetição 200 (R11), ordem das verificações (R16) e `SOMENTE_PARTICIPANTE`.\n+Depende de M1 + M2.\n+\n+**F3 — Presença offline** (R9, R10, R12, R18)\n+Com `lidoEm` no corpo: origem `qr_offline`, sincronização tardia (R9), janela e\n+código no instante da leitura (R12), `lidoEm` futuro (R12/R10) e atividade\n+cancelada (R18).\n+\n+**F4 — Presença manual** (R13, R14, R15, R17)\n+Implementar `POST /encontros/:id/presencas/manual`: justificativa (R13), limite de\n+manuais (R14), janela manual (R15), ordem da manual (R17), inscrição confirmada\n+(R8) e `SOMENTE_ORGANIZACAO`.\n+\n+**F5 — Lista de presenças** (R19, R20, R21, R22, R24)\n+Implementar `GET /encontros/:id/presencas`: ordem por `registradaEm`/`id` (R19),\n+lista persiste após cancelamento (R24) e ausência de rotas de edição, apagamento\n+e check-out — qualquer tentativa responde 404 (R20, R21).\n\\ No newline at end of file\n",
+       "additions": 266,
+       "deletions": 0,
+       "status": "added"
+      }
+     ]
+    },
+    "id": "msg_0b067f275001bY6ohBTt4OE7CN",
+    "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh"
+   },
+   "parts": [
+    {
+     "type": "text",
+     "text": "Use a skill to-spec. Escreva specs/M3-presenca.md a partir de entrevistas/M3-presenca.md. Cada regra cita a pergunta (P-xx) e, se houver, a regra do documento (RN-xxx). Siga o formato de specs/M0-infraestrutura.md (oito seções, regras numeradas R1..Rn, fatias). Leia também o contrato-api.md, seção M3, para as rotas e campos. M3 depende do status de inscrição de M2: onde a spec precisar de \"inscrição confirmada\", cite que a fonte é a spec de M2. ",
+     "id": "prt_0b067f275002n2ud1gdRUcuH2W",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f275001bY6ohBTt4OE7CN"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b067f275001bY6ohBTt4OE7CN",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 12140,
+     "input": 10110,
+     "output": 238,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 1792
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789665997446,
+     "completed": 1789666000675
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b067f286001lNVbrk7OAI0DMu",
+    "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh"
+   },
+   "parts": [
+    {
+     "snapshot": "7f34b70d06b9d84f9e470309571c751596e2f47a",
+     "type": "step-start",
+     "id": "prt_0b067f88f001EaVCMQ6Ur0ImBx",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f286001lNVbrk7OAI0DMu"
+    },
+    {
+     "type": "reasoning",
+     "text": "The user wants me to use the to-spec skill to write specs/M3-presenca.md from entrevistas/M3-presenca.md. Let me load the skill first, and read the necessary files.\n\nLet me start by loading the to-spec skill and reading the relevant files in parallel.",
+     "time": {
+      "start": 1789665999002,
+      "end": 1789665999289
+     },
+     "id": "prt_0b067f89a001jwEBxVAN4KBDnP",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f286001lNVbrk7OAI0DMu"
+    },
+    {
+     "type": "text",
+     "text": "\n\n",
+     "time": {
+      "start": 1789665999293,
+      "end": 1789666000220
+     },
+     "id": "prt_0b067f9bd001TOF1O9xB3VNM3u",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f286001lNVbrk7OAI0DMu"
+    },
+    {
+     "type": "tool",
+     "tool": "skill",
+     "callID": "call_0198fdcf69934d89a7ec511a",
+     "state": {
+      "status": "completed",
+      "input": {
+       "name": "to-spec"
+      },
+      "output": "<skill_content name=\"to-spec\">\n# Skill: to-spec\n\n# A conversa vira contrato\r\n\r\nVocê já tem tudo o que precisa: está na conversa. **Não entreviste de novo.** Sua\r\ntarefa é escrever, num arquivo, o que já foi decidido — e nada além.\r\n\r\nRegra que ninguém decidiu **não entra**. Se faltar alguma coisa para a spec ficar de pé,\r\npare e pergunte só aquilo. Não preencha buraco com \"geralmente é assim\".\r\n\r\n## Onde escrever\r\n\r\n`specs/Mx-<nome>.md`, uma spec por módulo — o auditor procura aí: `.opencode/agent/auditor.md` lê\r\n`specs/Mx-*.md` na entrada. O `x` é o número do módulo (M1 a M5).\r\n\r\n## Antes de escrever\r\n\r\nLeia o repositório: convenções, vocabulário, nomes que já existem. A spec fala a língua\r\ndo projeto — se o código chama de `encontro`, a spec não inventa `aula`.\r\n\r\nDecida também **onde isto vai ser verificado**. Prefira a costura mais externa que já\r\nexistir (aqui: HTTP, falando com a API por `fetch`). Quanto menos pontos de teste novos, melhor.\r\n\r\n## Modelo\r\n\r\n```markdown\r\n# Spec — <recurso>\r\n\r\n## 1. Objetivo\r\nUm parágrafo: que problema isto resolve, na visão de quem usa.\r\n\r\n## 2. Fora de escopo\r\nLista do que este recurso NÃO faz. Isto é tão contrato quanto o resto — é aqui que\r\nse recusa código que ninguém pediu.\r\n\r\n## 3. Modelo\r\nOs campos da entidade, com tipo e origem (informado pelo cliente / calculado / derivado).\r\nCampo derivado nunca é guardado.\r\n\r\n## 4. Endpoints\r\nMétodo, caminho, corpo esperado, status de sucesso.\r\n\r\n## 5. Regras\r\nNumeradas: R1, R2, R3… Uma regra por linha de decisão, cada uma com o número, o limite\r\nou o valor exato que foi decidido, e o status HTTP de recusa quando houver.\r\n\r\nToda regra precisa ser observável de fora. \"O sistema deve ser rápido\" não é regra.\r\n\"Faltando 15 minutos para o início do encontro, a inscrição fecha com 422 INSCRICOES_ENCERRADAS\" é.\r\n\r\nQuando duas regras podem recusar a mesma operação, diga qual vale primeiro.\r\n\r\n## 6. Critérios de aceite\r\nLista numerada de cenários concretos, cada um apontando a regra que ele prova:\r\n\r\n1. (R1, R3) POST /x com dados válidos → 201, campo `y` igual a Z.\r\n\r\nRegra sem pelo menos um critério é regra sem prova. Volte e escreva o critério.\r\n\r\n## 7. Como isto será verificado\r\nA costura (interface) usada nos testes e por quê.\r\n\r\n## 8. Fatias de entrega\r\nA ordem de implementação, em fatias verticais. Cada fatia é um conjunto pequeno de\r\nregras que já dá para rodar e verificar sozinho.\r\n```\r\n\r\n## Depois de escrever\r\n\r\nMostre ao usuário a lista das regras numeradas — só os números e uma linha cada — e\r\npergunte se falta alguma. É a última chance de corrigir barato.\n\nBase directory for this skill: C:\\semana-academica\\.opencode\\skills\\to-spec\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+      "metadata": {
+       "name": "to-spec",
+       "dir": "C:\\semana-academica\\.opencode\\skills\\to-spec",
+       "truncated": false
+      },
+      "title": "Loaded skill: to-spec",
+      "time": {
+       "start": 1789665999537,
+       "end": 1789665999591
+      }
+     },
+     "id": "prt_0b067faa8001tCOMblebFT3cyl",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f286001lNVbrk7OAI0DMu"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_a3fb310c290e4439ac45bc01",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\specs\\M0-infraestrutura.md"
+      },
+      "output": "[8153 caracteres omitidos]",
+      "title": "specs\\M0-infraestrutura.md",
+      "time": {
+       "start": 1789665999714,
+       "end": 1789665999736
+      }
+     },
+     "id": "prt_0b067fac1001OWe9RaIn9AZDLU",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f286001lNVbrk7OAI0DMu"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_62f3416f4f6141e2b32b35ea",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\entrevistas\\M3-presenca.md"
+      },
+      "output": "[11644 caracteres omitidos]",
+      "title": "entrevistas\\M3-presenca.md",
+      "time": {
+       "start": 1789665999869,
+       "end": 1789665999892
+      }
+     },
+     "id": "prt_0b067fb660019QJh4cKUPFIkqS",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f286001lNVbrk7OAI0DMu"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_e1bedb14456f4c50987f11eb",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\contrato-api.md"
+      },
+      "output": "[13866 caracteres omitidos]",
+      "title": "contrato-api.md",
+      "time": {
+       "start": 1789666000158,
+       "end": 1789666000168
+      }
+     },
+     "id": "prt_0b067fc00001Y3yDyp0c9JpkUx",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f286001lNVbrk7OAI0DMu"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "7f34b70d06b9d84f9e470309571c751596e2f47a",
+     "type": "step-finish",
+     "tokens": {
+      "total": 12140,
+      "input": 10110,
+      "output": 238,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 1792
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b067fe55001mH7vqnfaM2110n",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067f286001lNVbrk7OAI0DMu"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b067f275001bY6ohBTt4OE7CN",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 25705,
+     "input": 13734,
+     "output": 195,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 11776
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789666000679,
+     "completed": 1789666003013
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b067ff27001iDuweoJ2D4M0xm",
+    "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh"
+   },
+   "parts": [
+    {
+     "snapshot": "7f34b70d06b9d84f9e470309571c751596e2f47a",
+     "type": "step-start",
+     "id": "prt_0b0680396001TPzcVeYRrJKIop",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067ff27001iDuweoJ2D4M0xm"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now let me look at the M2 spec and the auditor agent to understand the format and dependencies. Let me check what specs exist so far, and also look at how M2 spec cites things (since M3 references M2's inscription status).\n\nLet me read the files in the specs directory and check for any existing M2 spec.",
+     "time": {
+      "start": 1789666001817,
+      "end": 1789666002271
+     },
+     "id": "prt_0b0680399001Wi3WItyHwAxIwa",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067ff27001iDuweoJ2D4M0xm"
+    },
+    {
+     "type": "text",
+     "text": "\n\n",
+     "time": {
+      "start": 1789666002275,
+      "end": 1789666002645
+     },
+     "id": "prt_0b0680563001m4sj4uG22Dl1DN",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067ff27001iDuweoJ2D4M0xm"
+    },
+    {
+     "type": "tool",
+     "tool": "glob",
+     "callID": "call_5d533f9d74d54152a80e9620",
+     "state": {
+      "status": "completed",
+      "input": {
+       "pattern": "specs/*.md"
+      },
+      "output": "[46 caracteres omitidos]",
+      "title": "",
+      "time": {
+       "start": 1789666002452,
+       "end": 1789666002507
+      }
+     },
+     "id": "prt_0b068057f0016HGGCeTkQynJXs",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067ff27001iDuweoJ2D4M0xm"
+    },
+    {
+     "type": "tool",
+     "tool": "glob",
+     "callID": "call_4579faeec8cd45d2917583c3",
+     "state": {
+      "status": "completed",
+      "input": {
+       "pattern": "entrevistas/*.md"
+      },
+      "output": "[46 caracteres omitidos]",
+      "title": "",
+      "time": {
+       "start": 1789666002555,
+       "end": 1789666002602
+      }
+     },
+     "id": "prt_0b0680616001AdwKjTYJ9kJkzZ",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067ff27001iDuweoJ2D4M0xm"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_46ffd73e93074979a04d07a0",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\.opencode\\agent\\auditor.md"
+      },
+      "output": "[4549 caracteres omitidos]",
+      "title": ".opencode\\agent\\auditor.md",
+      "time": {
+       "start": 1789666002628,
+       "end": 1789666002662
+      }
+     },
+     "id": "prt_0b068067f0013hgF0jlYWK0WSV",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067ff27001iDuweoJ2D4M0xm"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "7f34b70d06b9d84f9e470309571c751596e2f47a",
+     "type": "step-finish",
+     "tokens": {
+      "total": 25705,
+      "input": 13734,
+      "output": 195,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 11776
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b068079b001Hz27171uY03IPR",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b067ff27001iDuweoJ2D4M0xm"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b067f275001bY6ohBTt4OE7CN",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 46677,
+     "input": 1914,
+     "output": 19419,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 25344
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789666003017,
+     "completed": 1789666135978
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b0680849001wsjwqXGGPjjwoS",
+    "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh"
+   },
+   "parts": [
+    {
+     "snapshot": "7f34b70d06b9d84f9e470309571c751596e2f47a",
+     "type": "step-start",
+     "id": "prt_0b0680bfd0016M7240smCVjzE1",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b0680849001wsjwqXGGPjjwoS"
+    },
+    {
+     "type": "reasoning",
+     "text": "Only M0 spec exists, and only M3 entrevista exists. The user says M3 depends on M2's inscription status spec. But the M2 spec doesn't exist yet. The user says: \"M3 depende do status de inscrição de M2: onde a spec precisar de 'inscrição confirmada', cite que a fonte é a spec de M2.\"\n\nSo I need to write specs/M3-presenca.md from entrevistas/M3-presenca.md. Let me carefully build the spec following M0-infraestrutura.md's format with 8 sections and numbered rules R1..Rn.\n\nLet me also check the entrevistas folder to see if there are other interviews, and check if there's a docs directory or something. Actually it says only M3-presenca.md exists in entrevistas. Let me verify the M2 spec status - the user says \"a fonte é a spec de M2\", but M2 spec may not exist. I'll cite \"spec de M2\" as the source per instructions.\n\nLet me now analyze the interview and build the rules. Let me go through each P:\n\n**P-01** — Janela abre 15 min antes do `inicio`, borda incluída. Ex.: início 19:00 → 18:45:00 aceita; 18:44:59 → `FORA_DA_JANELA`. (RN-301)\n\n**P-02** — Janela fecha 30 min depois do `inicio` (não no fim), borda incluída. Ex.: início 19:00 → 19:30:00 aceita; 19:30:01 → `FORA_DA_JANELA`. (RN-301)\n\n**P-03** — Janela do código `GET /encontros/:id/codigo` é a mesma da presença; fora dela a organização nem obtém o código. Atividade cancelada → `ATIVIDADE_CANCELADA`. (RN-302)\n\n**P-04** — Código muda a cada minuto, alinhado ao relógio: de hh:mm:00 a hh:mm:59. `trocaEm` = próximo hh:mm:00. (RN-303)\n\n**P-05** — Vale o código do minuto atual e do anterior. Ex.: código das 19:03 → `trocaEm` 19:04:00, `validoAte` 19:05:00; enviado 19:04:59 aceita; 19:05:00 → `CODIGO_INVALIDO`. (RN-304)\n\n**P-06** — Prazo de sincronização offline: até 2 h depois do `fim` do encontro, inclusive; conta do `fim`, não do `lidoEm`. Ex.: fim 22:00 → envio 00:00:00 aceita; 00:00:01 → `SINCRONIZACAO_TARDIA`. (RN-310)\n\n**P-07** — 10% das inscrições confirmadas, arredondando pra cima; a N+1ª falha. Ex.: 20 → 2; 21 → 3; 5 → 1. (RN-313)\n\n**P-08** — `FORA_DA_JANELA` antes de `CODIGO_INVALIDO`. (RN-314)\n\n**P-09** — Alfabeto `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (tem L; sem 0, O, 1, I). Leitura aceita minúscula e ignora espaço. Ausente/tipo errado → `DADOS_INVALIDOS`; fora do alfabeto → `CODIGO_INVALIDO`. (RN-305)\n\n**P-10** — `origem`: `qr` = lida e enviada na hora; `qr_offline` = veio com `lidoEm`; `manual` = rota manual. (RN-315)\n\n**P-11** — Presença repetida devolve 200 antes de conferir janela e código. Fora da janela ou código errado, se já tem presença → 200 mesmo assim. (RN-307, RN-314)\n\n**P-12** — `lidoEm` no futuro: não é erro; vale como o instante do envio. Origem continua `qr_offline`. (RN-309, RN-315)\n\n**P-13** — Quem pode registrar presença: só participante com inscrição `confirmada`. `em_espera`, `convocada`, `cancelada` ou sem inscrição → `NAO_INSCRITO`. (RN-306; dependência de M2 via P-31)\n\n**P-14** — Justificativa mínima 10 caracteres. Ausente, vazia ou <10 → `JUSTIFICATIVA_OBRIGATORIA`; tipo errado → `DADOS_INVALIDOS`. Na manual, é a primeira regra conferida. (RN-311, RN-314)\n\n**P-15** — Janela manual: da abertura (15 min antes do `inicio`) até 2 h depois do `fim`. (RN-312)\n\n**P-16** — Atividade cancelada: obter código → `ATIVIDADE_CANCELADA`. Registrar presença (QR ou manual): cancelar cancela inscrições → ninguém `confirmada` → `NAO_INSCRITO`, salvo quem já tem presença → 200. (RN-302, RN-217, RN-306, RN-307)\n\n**P-17** — Ordana da lista: `registradaEm` crescente; empate por `id`. (decisão P-17)\n\n**P-18a** — Sem correção/apagamento de presença. (contrato §5)\n\n**P-18b** — Sem check-out. (contrato §5)\n\n**P-18c** — Não registra presença para quem não é participante → `SOMENTE_PARTICIPANTE`. (contrato §5)\n\n**P-18d** — M3 não calcula frequência (RN-404/RN-504), não tem notificação, e a fila offline fica só na tela (não guarda fila offline no servidor). (documento §7; RN-404/RN-504)\n\n**P-27** — Leitura offline reenviada (mesmo `lidoEm`) → 200 com a mesma presença, mesmo `id`, sem criar segunda. (RN-307)\n\n**P-28** — RETIRADA (origem na lista já está no contrato).\n\n**P-19** — Código de outro encontro → `CODIGO_INVALIDO`. (RN-304)\n\n**P-20** — Encontros e sala não mudam depois de criada a atividade, só título e vagas; a janela nunca muda. (RN-110)\n\n**P-20a** — Campos editáveis via PATCH: título e vagas. Não afeta M3.\n\n**P-21** — Janela conferida contra `lidoEm` (quando enviado) e contra o relógio atual (quando ausente). Com `lidoEm`, janela e código conferidos no instante da leitura; sem `lidoEm`, no instante do envio. Sincronização sempre no envio. (RN-308, RN-310)\n\n**P-22** — Não inscrito + fora da janela → `NAO_INSCRITO`. (RN-314)\n\n**P-23** — `SINCRONIZACAO_TARDIA` antes de `CODIGO_INVALIDO`. Ordem completa do participante: 404 → presença existente (200) → não inscrito → sincronização tardia → fora da janela → código inválido. (RN-314)\n\n**P-24** — `lidoEm` antes de 15 min do `inicio` → `FORA_DA_JANELA`. (RN-308, RN-301)\n\n**P-25** — Presenças continuam listadas após cancelamento da atividade. (decisão P-25)\n\n**P-26** — Manual: mesmo status exigido (só `confirmada`). Ordem manual: justificativa → presença existente (200) → não inscrito → fora da janela → limite de manuais. (RN-311, RN-314)\n\n**P-29** — Mesmo código/trocaEm/validoAte dentro do mesmo minuto; cruzar minuto → novo código. (RN-303)\n\n**P-30** — Offline + atividade cancelada antes da sincronização → `NAO_INSCRITO` (a não ser que presença já exista → 200). (RN-217, RN-306, RN-307)\n\n**P-31** — `convocada` não tem direito a presença QR; só `confirmada`. (RN-306, RN-205, RN-214)\n\nNow let me organize these into rules. Let me think about the ordering of rules and the fatias.\n\nLet me think about what the endpoints are for M3:\n\n**M3 — Presença por QR**\n| GET | `/encontros/:id/codigo` | organização | 200 `CodigoDoEncontro` |\n| POST | `/encontros/:id/presencas` | participante | 201 `Presenca` na primeira vez; 200 `Presenca` depois |\n| POST | `/encontros/:id/presencas/manual` | organização | 201 `Presenca` na primeira vez; 200 `Presenca` depois |\n| GET | `/encontros/:id/presencas` | organização | 200 `[Presenca]` |\n\nNow let me build the rules. I'll organize analogous to how M0 does. Let me draft:\n\n### 1. Objetivo\nRegistrar e consultar presença nos encontros por QR code: a organização emite um código por minuto e o participante o lê (online ou offline) dentro da janela; a organização pode registrar presença manual com justificativa.\n\n### 2. Fora de escopo\n- Correção/apagamento de presença (P-18a)\n- Check-out/saída (P-18b)\n- Cálculo de frequência (RN-404/RN-504; P-18d)\n- Notificação (P-18d)\n- Fila offline no servidor (P-18d)\n- Alteração de encontros e troca de sala (RN-110)\n- Presença para não participante (P-18c) — rota exige perfil\n\n### 3. Modelo\nCodigoDoEncontro and Presenca models.\n\n### 4. Endpoints\n\n### 5. Regras\n\nLet me enumerate rules carefully:\n\nR1. Janela de presença (abertura). Abre 15 min antes do `inicio`, borda incluída. Ex.: inicio 19:00 → 18:45:00 aceita; 18:44:59 → `FORA_DA_JANELA`. (P-01, RN-301)\n\nR2. Janela de presença (fechamento). Fecha 30 min depois do `inicio` (não do fim), borda incluída. Ex.: inicio 19:00 → 19:30:00 aceita; 19:30:01 → `FORA_DA_JANELA`. (P-02, RN-301)\n\nR3. Janela do código (`GET /encontros/:id/codigo`) é a mesma da presença. Fora dela → `FORA_DA_JANELA`. Atividade cancelada → `ATIVIDADE_CANCELADA`. (P-03, RN-302)\n\nR4. O código muda a cada minuto, alinhado ao relógio (de hh:mm:00 a hh:mm:59). `trocaEm` = próximo hh:mm:00. (P-04, RN-303)\n\nR5. O código emitido vale para o minuto atual e o anterior: `validoAte` = 2 minutos após a emissão (trocaEm + 1 min). Envio dentro de `validoAte` → aceito; no instante `validoAte` → `CODIGO_INVALIDO`. (P-05, RN-304)\n\nWait, let me think about validoAte more carefully. Ex.: código das 19:03 → `trocaEm` 19:04:00, `validoAte` 19:05:00; enviado 19:04:59 aceita; 19:05:00 → `CODIGO_INVALIDO`. So the code valid for current minute (19:03) and previous—wait, actually \"Vale o código do minuto atual e do anterior\". Emitted at 19:03, valid until 19:05:00 (i.e., covers 19:03 and 19:04 minutes). So `validoAte` = trocaEm + 1 minute = 19:04:00 + 1 = 19:05:00. Good.\n\nAlso P-29: same code within the same minute; crossing minute → new code.\n\nR6. Código de outro encontro → `CODIGO_INVALIDO`. (P-19, RN-304)\n\nR7. Alfabeto: `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (tem L; sem 0, O, 1, I). Leitura aceita minúscula e ignora espaço. Código ausente ou tipo errado → `DADOS_INVALIDOS`; fora do alfabeto → `CODIGO_INVALIDO`. (P-09, RN-305)\n\nR8. `lidoEm`: prazo de sincronização offline até 2 h depois do `fim` do encontro, inclusive; conta a partir do `fim`, não do `lidoEm`. Envio em `fim` + 2h → aceito; `fim` + 2h + 1s → `SINCRONIZACAO_TARDIA`. (P-06, RN-310)\n\nR9. Origem da presença: `qr` = sem `lidoEm`; `qr_offline` = com `lidoEm`; `manual` = rota manual. (P-10, RN-315)\n\nR10. Repetição: presença já registrada → 200 com a mesma presença (mesmo `id`), conferida antes de não inscrito, janela e código; vale mesmo fora da janela ou com código errado. (P-11, P-27, RN-307, RN-314)\n\nR11. `lidoEm` no futuro: não é erro; vale o instante do envio; origem continua `qr_offline`. (P-12, RN-309, RN-315)\n\nR12. Inscrição necessária: só participante com inscrição `confirmada` registra presença (QR ou manual). `em_espera`, `convocada`, `cancelada` ou sem inscrição → `NAO_INSCRITO`. Status vem da spec de M2. (P-13, P-26, P-31, RN-306; M2)\n\nR13. Justificativa manual: mínimo 10 caracteres. Ausente, vazia ou <10 → `JUSTIFICATIVA_OBRIGATORIA`; tipo errado → `DADOS_INVALIDOS`. (P-14, RN-311)\n\nR14. Limite de manuais: 10% das inscrições confirmadas, arredondando pra cima; a N+1ª manual → `LIMITE_DE_MANAIS`. Ex.: 20 → 2; 21 → 3; 5 → 1. (P-07, RN-313)\n\nHmm, note: does the limite consider manuais already registered, or fresh attempts? \"quantas presenças manuais por encontro? 10% das inscrições confirmadas, arredondando pra cima; a N+1ª falha.\" I'll phrase as: por encontro, no máximo teto(10% das inscrições confirmadas) presenças manuais; a tentativa N+1ª → `LIMITE_DE_MANAIS`. The limit counts registered manual presences (by origin = manual). \n\nR15. Janela da manual: da abertura da janela (15 min antes do `inicio`) até 2 h depois do `fim`. (P-15, RN-312)\n\nR16. Ordem da presença automática (POST /encontros/:id/presencas): 404 → presença existente (200) → não inscrito (403 `NAO_INSCRITO`) → sincronização tardia → fora da janela → código inválido. (P-08, P-22, P-23, P-24, RN-314)\n\nLet me check the full detailed ordering. P-23: \"Ordem completa do participante: 404 → presença existente (200) → não inscrito → sincronização tardia → fora da janela → código inválido\". And P-08: FORA_DA_JANELA antes de CODIGO_INVALIDO. P-22: NAO_INSCRITO antes de FORA_DA_JANELA. So combined:\n\n1. 404 (encontro não existe)\n2. presença existente → 200\n3. não inscrito → 403 NAO_INSCRITO\n4. sincronização tardia → 422 SINCRONIZACAO_TARDIA\n5. fora da janela → 422 FORA_DA_JANELA\n6. código inválido → 422 CODIGO_INVALIDO\n\nR17. Ordem da manual (POST /encontros/:id/presencas/manual): justificativa → presença existente (200) → não inscrito → fora da janela → limite de manuais. (P-26; P-14, P-15, P-07, RN-311, RN-314)\n\nWait, but manual does it have 404 first? Yes — contract order: existência (404) before corpo (422). And identification 401, profile 403 (SOMENTE_ORGANIZACAO). Then body 422 (justificativa). P-14 says: \"Na manual, a justificativa é a primeira regra conferida\". So order for manual: 401 → 403 SOMENTE_ORGANIZACAO → 404 → 422 DADOS_INVALIDOS / corpo → justificativa (JUSTIFICATIVA_OBRIGATORIA) → presença existente (200) → não inscrito → fora da janela → limite de manuais.\n\nP-14 says justificativa is first rule among resource rules. Note DADOS_INVALIDOS for wrong type is the body check (422), which comes before resource rules per contract. JUSTIFICATIVA_OBRIGATORIA is a resource rule. Good.\n\nR18. `lidoEm` conferência: com `lidoEm`, janela e código são conferidos no instante da leitura; sem `lidoEm`, no instante do envio. (P-21, RN-308, RN-310)\n\nR19. `lidoEm` antes de 15 min do `inicio` → `FORA_DA_JANELA`. (P-24, RN-308, RN-301) — this is a corollary of R1 but with lidoEm. Could merge into R18. Hmm. I think I can fold P-24 into the \"janela conferida no lidoEm\" rule. But the skill says one rule per line of decision. P-24 is a specific decision but it's really a consequence of R1+R18. Maybe keep R18 comprehensive: janela (R1/R2) and código (R5) conferidos no `lidoEm`; também sincronização tardia no envio. P-24 is just an example of R1 applied at lidoEm. I could merge. But simpler to have a distinct rule about which clock instant each check uses. Let me make R18 = \"Conferência usa o instante da leitura quando há `lidoEm`, senão o do envio\" covering P-21, P-24, and include P-06's \"conta do fim, não do lidoEm\" as part of sync rule R8.\n\nActually P-24 is basically a boundary example supporting R18. I'll cite both P-21 and P-24 under R18.\n\nR19 — Atividade cancelada:\n- GET código → `ATIVIDADE_CANCELADA` (P-03, P-16)\n- Registrar presença QR/manual: cancelamento cancela inscrições (fonte M2 / RN-217), então ninguém mais `confirmada` → `NAO_INSCRITO`, salvo quem já tem presença → 200. (P-16, P-30, RN-302, RN-217, RN-306, RN-307)\n\nActually let me split: R3 covers código window + cancelada. And a separate rule about presença em atividade cancelada. Let me think about whether \"atividade cancelada\" intercepts before or after. For código: ATIVIDADE_CANCELADA. For presenças: the mechanism is that cancelamento cancels inscrições, so the NAO_INSCRITO check fires. This means it's not a separate error code for presença (only 200 if already has one). Good.\n\nR20. Lista `GET /encontros/:id/presencas`: ordem crescente de `registradaEm`; empate por `id`. (P-17)\n\nR21. Presenças continuam listadas após cancelamento da atividade — presença é histórico; não há apagamento. (P-25, RN-217, P-18a)\n\nR22. Perfil das rotas: `GET /encontros/:id/codigo`, `POST .../manual`, `GET .../presencas` → organização (`SOMENTE_ORGANIZACAO`); `POST .../presencas` → participante (`SOMENTE_PARTICIPANTE`). (contrato §5, P-18c)\n\nR23. Encontros e sala não mudam após a criação da atividade; só título e vagas. A janela nunca muda — o código segue as regras normais. (P-20, P-20a, RN-110)\n\nHmm, this is more about M1. But P-20 is a decision that affects M3, so include it. Actually it's relevant: \"a janela nunca muda\" — the code remains valid per normal rules. Include.\n\nAlso — the identification/401, 404 NAO_ENCONTRADO etc. are all R0 infra rules. The spec per module focuses on resource rules. In M0, the base rules are there. So the M3 spec should just reference the module-specific rules. It's fine.\n\nLet me also think about facets: filter list and other details for GET /presencas. P-17 decided ordering.\n\nNow, let me also consider P-28 (RETIRADA) — skip, it's retracted.\n\nNow what about checks for who gets served: \"sem lidoEm, janela no envio\" and the 201/200 semantics: 201 first time, 200 after. That's in the contract.\n\nNow let me think about how to number — maybe group to match the fatias and rules. Let me enumerate in a logical order, grouped by topic:\n\nRules list:\n1. R1 — Janela de presença — abertura (15 min ante inicio, borda) (P-01, RN-301)\n2. R2 — Janela de presença — fechamento (30 min pos inicio) (P-02, RN-301)\n3. R3 — Código: mesmo janela; fora → FORA_DA_JANELA; atividade cancelada → ATIVIDADE_CANCELADA (P-03, RN-302)\n4. R4 — Código gira por minuto alinhado ao relógio; trocaEm = próximo minuto; mesmo minuto → mesmo código (P-04, P-29, RN-303)\n5. R5 — Código válido para o minuto atual e o anterior; validoAte = trocaEm + 1 min; no instante validoAte → CODIGO_INVALIDO (P-05, RN-304)\n6. R6 — Código de outro encontro → CODIGO_INVALIDO (P-19, RN-304)\n7. R7 — Alfabeto do código; minúscula aceita; espaço ignorado; ausente/tipo → DADOS_INVALIDOS; fora do alfabeto → CODIGO_INVALIDO (P-09, RN-305)\n8. R8 — Inscrição confirmada exigida; demais status → NAO_INSCRITO; fonte do status = spec M2 (P-13, P-31, RN-306; M2)\n9. R9 — Sincronização tardia: envio até fim + 2h inclusivo; senão SINCRONIZACAO_TARDIA (P-06, RN-310)\n10. R10 — Origem: qr / qr_offline / manual (P-10, RN-315)\n11. R11 — Presença já registrada → 200 mesmo id; checado antes de não inscrito/janela/código; fora da janela/código errado ainda 200 (P-11, RN-307, RN-314); reenvio offline mesmo lidoEm → 200 sem segunda presença (P-27, RN-307)\n12. R12 — lidoEm futuro → vale instante do envio; origem qr_offline (P-12, RN-309, RN-315)\n13. R13 — Justificativa: ≥10 chars; ausente/vazia/curta → JUSTIFICATIVA_OBRIGATORIA; tipo errado → DADOS_INVALIDOS; primeira regra na manual (P-14, RN-311, RN-314)\n14. R14 — Limite de manuais: teto(10% confirmadas); N+1ª → LIMITE_DE_MANUAIS (P-07, RN-313)\n15. R15 — Janela manual: 15 min antes do inicio até fim + 2h (P-15, RN-312)\n16. R16 — Ordem da presença automática (P-08, P-22, P-23, RN-314)\n17. R17 — Ordem da manual (P-26, RN-314)\n18. R18 — Conferência por lidoEm vs envio (P-21, P-24, RN-308, RN-301)\n19. R19 — Atividade cancelada: presença QR/manual → NAO_INSCRITO (cancelamento cancela inscrições — fonte M2) salvo presença existente → 200 (P-16, P-30, RN-217, RN-306, RN-307)\n20. R20 — Lista ordenada por registradaEm, empate id (P-17)\n21. R21 — Sem correção/apagamento de presença (P-18a)\n22. R22 — Sem check-out (P-18b)\n23. R23 — Perfil das rotas: org / participante (P-18c, contrato)\n24. R24 — Janela imutável: encontros e sala não mudam, só título e vagas; código segue regras normais (P-20, P-20a, RN-110)\n25. R25 — Presenças continuam listadas após cancelamento (P-25)\n26. R26 — M3 não calcula frequência (RN-404/RN-504) (P-18d)\n27. R27 — Fila offline fica só no app; servidor não guarda fila (P-18d)\n\nHmm, R26 and R27 are more \"fora de escopo\" items. But per the M0 example, \"fora de escopo\" is a section listing things. The rules section is for observable rules. Frequency and offline queue aren't really observable API rules — they're non-features. They belong in \"Fora de escopo\" section. I'll put them there instead of as rules. But the skill says rules section should have all decisions... Actually P-18d's decisions about no notification, no frequency calc, offline queue on screen are non-features → Fora de escopo. The auditor checks \"fora de escopo\" for refusing code nobody asked. So put them there.\n\nLet me reconsider: Fora de escopo section should include:\n- Correção/apagamento de presença (P-18a)\n- Check-out (P-18b)\n- Cálculo de frequência (RN-404/RN-504)\n- Notificação ao participante (P-18d)\n- Fila offline guardada no servidor (P-18d)\n- Alteração de encontros e troca de sala (RN-110 / P-20)\n- Presença de quem não é participante (P-18c) — actually that's a role restriction, it's a rule (SOMENTE_PARTICIPANTE). Keep as rule R23.\n\nNow the rules list refined. Let me also double-check rule ordering. Let me settle numbering:\n\n- R1 janela abertura\n- R2 janela fechamento\n- R3 código janela + cancelada\n- R4 rotação minuto / trocaEm\n- R5 validade 2 minutos / validoAte\n- R6 código outro encontro\n- R7 alfabeto\n- R8 inscrição confirmada (fonte M2)\n- R9 sincronização tardia\n- R10 origem\n- R11 repetição (200 mesmo id, antes das demais)\n- R12 lidoEm futuro\n- R13 justificativa\n- R14 limite de manuais\n- R15 janela manual\n- R16 ordem automática\n- R17 ordem manual\n- R18 conferência no lidoEm vs envio\n- R19 atividade cancelada → presenças\n- R20 lista ordenada\n- R21 sem edição/apagamento\n- R22 sem check-out\n- R23 perfil das rotas\n- R24 janela imutável (encontros/sala não mudam)\n- R25 presenças persistem após cancelamento\n\nThat's 25 rules. Reasonable. Compare to M0 which had 18.\n\nNow the model section:\n\n### 3.1 CodigoDoEncontro\n| encontroId | string | calculado (id do encontro — M1) |\n| codigo | string | calculado — 6 caracteres do alfabeto |\n| trocaEm | datetime | calculado — próximo minuto do relógio |\n| validoAte | datetime | calculado — trocaEm + 1 minuto |\n\n### 3.2 Presenca\n| id | string | gerado — `pre_` + 8 hex |\n| encontroId | string | derivado da rota |\n| participanteId | string | derivado do X-Usuario (automática) ou do corpo (manual) |\n| origem | string | calculado — qr | qr_offline | manual |\n| lidoEm | datetime | informado (opcional) ou = instante do envio (R12) |\n| registradaEm | datetime | calculado — instante do envio |\n| justificativa | string | informado só na manual; null caso contrário |\n\nWait, `lidoEm` \"o instante que valeu para as regras\". In offline case it's informed. In the no-lidoEm case, it's the environment instant. In future case, it's the environment instant (per R12). So lidoEm is \"o instante que valeu para as regras\" — could be informed or derivate. Keep it as in contract.\n\n### 4. Endpoints table:\n\n| GET | /encontros/:id/codigo | organização | 200 CodigoDoEncontro |\n| POST | /encontros/:id/presencas | participante | 201 Presenca; 200 depois |\n| POST | /encontros/:id/presencas/manual | organização | 201; 200 depois |\n| GET | /encontros/:id/presencas | organização | 200 [Presenca] |\n\nWith entrada: POST presencas → { codigo, lidoEm? }; POST manual → { participanteId, justificativa }.\n\n### 7. Verification — HTTP direct tests like M0.\n\n### 8. Fatias\n\nLet me design fatias (vertical slices):\n\n**F1 — Emitir código** (R3, R4, R5, R6, R7 parts, R24): GET /encontros/:id/codigo — same code within minute, changes across minute, trocaEm/validoAte, window FORA_DA_JANELA, ATIVIDADE_CANCELADA, perfil organização (R23 partial). This needs an encontro to exist — depends on M1. Hmm. F1 needs a atividade/encontro created. So all fatias depend on M1 data. That's fine — the spec says M3 depends on M1 (encontros) and M2 (inscrições).\n\n**F2 — Registrar presença online** (R1, R2, R8, R11, R16, R18-part, R12?, R7 partial): POST /encontros/:id/presencas with codice — window, code validity, inscription confirmed, duplicate 200, ordering.\n\n**F3 — Presença offline (lidoEm)** (R9, R10, R12, R18, R19): lidoEm present → qr_offline; sync tardia; future lidoEm; window checked at lidoEm; anulação por cancelamento.\n\n**F4 — Presença manual** (R13, R14, R15, R17): POST manual — justificativa, limite, janela manual, ordem.\n\n**F5 — Lista de presenças** (R20, R21, R22, R25): GET /encontros/:id/presencas sorting, persists across cancel, no edit/delete routes.\n\nHmm but R21/R22 (no delete/check-out) — how to verify? 404 on nonexistent route. And R25 — presenças persist after cancel.\n\nLet me map rules to fatias:\n- F1: R3, R4, R5, R6, R24 (part — janela imutável relates to code). Hmm R24 is about janela never changing; the verification: \"Sem cenário: janela imutável por construção (RN-110)\". Testing that encontros can't change... that's M1. Maybe F1 includes verifying that two GETs in same minute → same code, and config. I'll keep R24's proof in fatia F1 or note it as construction. Actually P-20/P-20a is about M1's PATCH. For M3, this rule means \"the window never changes during an encontro's life\". Since M1 only allows editing título/vagas, M3 relies on that. The proof would be in M1. I'll mark F1 as the fatia that proves stable code behavior, referencing that window is built from immutable encontro fields.\n\nLet me reconsider: maybe simpler fatias:\n\n**F1 — Emitir código QR** (R3, R4, R5, R6, R7, R23[GET código], R24): verify codes, rotation, validity, alphabet, same code per minute, FORA_DA_JANELA, ATIVIDADE_CANCELADA, SOMENTE_ORGANIZACAO.\n\n**F2 — Presença QR online** (R1, R2, R8, R11, R16, R23[participante], R18-sem-lidoEm): 201, duplicate 200, NAO_INSCRITO, FORA_DA_JANELA, CODIGO_INVALIDO ordering, window bounds.\n\n**F3 — Presença offline** (R9, R10, R12, R18-com-lidoEm, R19): qr_offline, sync tardia, futuro lidoEm, janela no lidoEm, cancelamento.\n\n**F4 — Presença manual** (R13, R14, R15, R17, R8 manual, R23 manual): justificativa, limite, janela manual, ordem manual, status inscrição.\n\n**F5 — Lista de presenças** (R20, R25, R21, R22): ordenação, persistência pós-cancelamento, ausência de rotas de edição/delete/check-out.\n\nHmm R7 alphabet — where to test? In F2 (validation of code on POST) and F1 (generated codes conform). The alphabet for reading is on POST. For GET code, the generated code must use the alphabet. I'll put \"código gerado usa o alfabeto\" in F1 and \"leitura valida alfabeto\" in F2. Actually R7 covers both reading and generation. Let me keep R7 in F1 for generation and reading validation in F2 — or just put R7 in F2 and mention generation conforms in F1 too. Simpler: F1 verifies emitted code is 6 chars from alphabet; F2 verifies reading validations (minúscula, espaço, fora do alfabeto, ausente). Both cite R7.\n\nNow the acceptance criteria section — each rule must have at least one criterion. Let me build the list mapping rules to concrete scenarios.\n\nLet me now also decide: the entrevista says P-21 confirms window/code checked at lidoEm when present. And the sync check always happens \"no envio\" (instante do envio). Actually \"Sincronização sempre no envio\" — sync is always computed at send time (compared to now - fim). Yes.\n\nAlso, need a subtlety for R16 ordering: 404 → existing presença (200) → NAO_INSCRITO → SINCRONIZACAO_TARDIA → FORA_DA_JANELA → CODIGO_INVALIDO. Note: when lidoEm present, window/code are checked at lidoEm, but sync at envio. Order-wise, sync tardia comes right after não inscrito. Hmm, but what about window being checked... the ordering applies to the checks that are relevant. Keep the ordering rule as given.\n\nFor manual ordering R17 (from P-26): justificativa → presença existente (200) → não inscrito → fora da janela → limite de manuais. What about body checks? Contract: 401 → 403 → 404 → 422 → resource. So DADOS_INVALIDOS (field missing/wrong type) before JUSTIFICATIVA_OBRIGATORIA. P-14 says \"Na manual, a justificativa é a primeira regra conferida\" — among resource rules. I'll phrase R17 including that.\n\nAlso note: is there a \"código\" in manual? No, manual is by participanteId. So no code check. Right.\n\nNow let me also think about the \"limite de manuais\" — it counts manual presences for the encontro (origin=manual). \"quantas presenças manuais por encontro? 10% das inscrições confirmadas\". The N+1ª fails. N = teto(10% de confirmadas). Note: confirmadas count at what time? Presumably current count of inscrições confirmadas for the atividade (the encontro belongs to atividade). I'll phrase: \"de todas as inscrições confirmadas na atividade\". Hmm, the entrevista says \"10% das inscrições confirmadas\". Inscriptions are per atividade (M2). So the limit is per encontro based on the confirmadas count of the atividade. I'll say \"inscrições confirmadas da atividade\". Keep it concrete but not over-specifying. Actually to be safe and simple: \"10% das inscrições confirmadas na atividade, arredondando pra cima\". And manual presences counted per encontro. I'll include ex.: 20 → 2; 21 → 3; 5 → 1.\n\nNow let me write the acceptance criteria:\n\n1. (R1, R2, R16) Relógio em 18:44:59, inicio 19:00 → POST presencas com código válido → 422 FORA_DA_JANELA; em 18:45:00 → 201.\n2. (R1, R2, R16) Relógio em 19:30:00 → 201; 19:30:01 → FORA_DA_JANELA.\n3. (R3, R23, R4...) GET /encontros/:id/codigo com organização até 15 min antes do inicio → 200 com CodigoDoEncontro; antes → FORA_DA_JANELA; atividade cancelada → ATIVIDADE_CANCELADA; participante → SOMENTE_ORGANIZACAO.\n4. (R4, R29/P-29) Dois GETs no mesmo minuto → mesmo codigo/trocaEm/validoAte; cruzar o minuto → trocaEm = próximo hh:mm:00 e código novo.\n5. (R5) Enviado no instante validoAte → CODIGO_INVALIDO; antes (validoAte − 1s) → 201.\n6. (R6) Código emitido em enc_1 enviado em enc_2 → 422 CODIGO_INVALIDO.\n7. (R7) Minúscula → 201; com espaço → 201; caractere fora do alfabeto (ex.: O, 0, 1, I) → CODIGO_INVALIDO; codigo ausente → DADOS_INVALIDOS.\n8. (R8) Participante com inscrição em_espera/convocada/cancelada/sem inscrição → 403 NAO_INSCRITO; confirmada → 201. (status = spec M2)\n9. (R9) lidoEm 19:10 (< fim+2h), envio 23:59 → 201 com origem qr_offline; envio em fim+2h → 201; +1s → SINCRONIZACAO_TARDIA. (R9, R18)\n10. (R10) POST sem lidoEm → origem qr; com lidoEm → origem qr_offline; manual → origem manual.\n11. (R11) Repetir → 200 mesmo id; presença existente + fora da janela → 200; + código errado → 200; reenvio offline mesmo lidoEm → 200 mesmo id, uma só presença.\n12. (R12) lidoEm = envio + 1min → 201, grava instante do envio, origem qr_offline.\n13. (R13) Manual justificativa \"\", \"abc\", ausente → JUSTIFICATIVA_OBRIGATORIA; tipo errado (ex.: número) → DADOS_INVALIDOS; 10+ → segue.\n14. (R14) N = teto(10% confirmadas); N manuais ok; N+1ª → LIMITE_DE_MANUAIS (com justificativa válida).\n15. (R15) Manual 20:00 (após fechamento 19:30, dentro de fim+2h) → 201; após fim+2h → FORA_DA_JANELA.\n16. (R16) Fora da janela + código errado → FORA_DA_JANELA; código errado + fora → FORA_DA_JANELA; não inscrito + fora da janela + código válido → NAO_INSCRITO; código errado + envio tardio → SINCRONIZACAO_TARDIA; encontro inexistente → 404 NAO_ENCONTRADO (antes de tudo).\n17. (R17) Manual de em_espera → NAO_INSCRITO (justificativa válida); ordem: presença existente → 200 mesmo fora da janela; justificativa inválida antes de NAO_INSCRITO? hmm. Actually P-26 says order manual: justificativa → presença existente (200) → não inscrito → fora da janela → limite de manuais. So: em_espera + justificativa curta → JUSTIFICATIVA_OBRIGATORIA (justificativa first). Let me add that.\n18. (R18) lidoEm = inicio − 16min → FORA_DA_JANELA (janela no lidoEm); lidoEm dentro da janela, envio tardio dentro de fim+2h → 201.\n19. (R19) Cancelar atividade → POST de quem não tem presença → NAO_INSCRITO; de quem tem → 200; GET código → ATIVIDADE_CANCELADA.\n20. (R20) Duas presenças → lista em ordem crescente de registradaEm; empate → id.\n21. (R21, R22) Não há rota de edição/apagamento de presença nem check-out: qualquer tentativa → 404 NAO_ENCONTRADO.\n22. (R23) Rota de participante com organização → SOMENTE_PARTICIPANTE; rotas de organização com participante → SOMENTE_ORGANIZACAO.\n23. (R24) Dentro do mesmo encontro, o código/validade não mudam por edição — janela imutável por construção (RN-110); editar título/vagas (M1) não muda código.\n24. (R25) Registrar presença; cancelar atividade; GET /presencas → lista ainda contém a presença.\n\nHmm, R24's criterion is weird because M1 PATCH only edits título/vagas. The entrevista said \"Sem cenário: janela imutável por construção\". So R24's test might be: 2 GETs soma mesma janela in different queries give consistent results; or just note it's structural. Actually per to-spec, \"Regra sem pelo menos um critério é regra sem prova.\" R24 as a non-M3 behavior... The observable M3-side effect: the code validity doesn't get invalidated by activity edits because window doesn't change; and the window is computed from encontro inicio which doesn't change. I can make the criterion: emitir código, PATCH atividade (título/vagas), reintar GET código → mesmo código no mesmo minuto / janela inalterada. But that mixes M1. Alternatively phrase R24 as: \"A janela de um encontro é fixa: só depende do `inicio` e `fim` gravados na criação; como M1 só permite editar título e vagas (RN-110), a janela nunca muda nem invalida códigos já emitidos.\" Criterion: after emitting a code, perform PATCH (title/vagas only) and GET again → same code while in same minute (window unchanged). That's testable once M1 PATCH exists. OK.\n\nActually, let me reconsider — maybe simpler to keep R24 as is but make it's acknowledgment to M1. I'll keep a criterion referencing PATCH.\n\nNow, one more nuance — R3 vs R16 order for GET codigo: does 404 come before ATIVIDADE_CANCELADA / FORA_DA_JANELA? Contract ordering: 404 before resource rules. So GET código for nonexistent encontro → 404. Cancelada is a resource rule. Fine.\n\nAlso should I capture \"GET código fora da janela → FORA_DA_JANELA\" ordering relative to cancelada? If both cancelada and fora da janela? P-03 gives: before window → FORA_DA_JANELA; cancelada → ATIVIDADE_CANCELADA. Not specified which wins if both. P-30/P-16 for presenças. I won't invent. Keep as separate triggers.\n\nNow: the entrevista P-23 gives the full participant order which includes 404 NAO_ENCONTRADO first. That's R16. Good.\n\nLet me also double check: R16 includes \"presença existente (200)\" before \"não inscrito\". But wait — if presença exista, the participant necessarily had a confirmed inscrição at registration time. And R11 says repetition check before NAO_INSCRITO. But what about after cancelamento? P-30: offline reading applied → NAO_INSCRITO unless presença already existed (200). And P-16: after cancel, someone with presença → 200, someone without → NAO_INSCRITO. Consistent with \"presença existente first\".\n\nBut hmm — actually there's a subtlety: the presença-exists check fires for the same participant+encontro. Yes (\"mesmo id\").\n\nNow about `lidoEm` storage: contract says `lidoEm` = \"o instante que valeu para as regras\". For online (no lidoEm informed), that's the environment clock at envio. Good.\n\nLet me now also verify the section \"7. Como isto será verificado\" — match M0 style: HTTP tests via fetch, node --test.\n\nLet me write the document now.\n\nAlso per the skill: \"Decida também onde isto vai ser verificado. Prefira a costura mais externa que já existir (aqui: HTTP)\". Good — HTTP.\n\nAlso note: the AGENTS.md rule \"nenhuma rota fora de contrato-api.md entra no código, nem como costura de teste — testes usam rotas do contrato\". So no temporary routes. I should reflect that in section 7 — the same approach M0 took. And the tests need M1 data (atividades/encontros) and M2 (inscrições). So before M1/M2 exist, M3 tests need those routes from the contract (POST /atividades from M1, POST /atividades/:id/inscricoes + confirmacao from M2). That's fine — they're contract routes, just implemented by M1/M2. The fatias note dependency.\n\nI need to check the fatia descriptions for dependencies. M3 depends on M1 (encontros) and M2 (inscrições). Since those specs may not be written yet, I'll explicitly note in fatias which M1/M2 contract routes must exist.\n\nLet me write the file.\n\nLet me structure rules in a logical flow and make sure each cites P-xx and RN where given.\n\nSection 5 rules, with status codes:\n\nR1. (P-01, RN-301) A janela de presença abre 15 min antes do `inicio`, borda incluída: `inicio` 19:00 → 18:45:00 aceita; 18:44:59 → 422 `FORA_DA_JANELA`. (Só para POST presencas; o código segue a mesma janela — R3.)\n\nR2. (P-02, RN-301) Fecha 30 min depois do `inicio` (não do `fim`), borda incluída: 19:30:00 aceita; 19:30:01 → 422 `FORA_DA_JANELA`.\n\nR3. (P-03, RN-302) `GET /encontros/:id/codigo` usa a mesma janela da presença; fora dela → 422 `FORA_DA_JANELA`. Atividade cancelada → 422 `ATIVIDADE_CANCELADA`.\n\nR4. (P-04, P-29, RN-303) O código gira a cada minuto alinhado ao relógio (de hh:mm:00 a hh:mm:59); `trocaEm` é o próximo `hh:mm:00`. Dentro do mesmo minuto, o código, o `trocaEm` e o `validoAte` são sempre os mesmos; ao cruzar o minuto, giram.\n\nR5. (P-05, RN-304) Um código emitido vale para o minuto atual e o anterior: `validoAte` = `trocaEm` + 1 min. Ex.: código das 19:03 → `trocaEm` 19:04:00, `validoAte` 19:05:00; envio 19:04:59 → aceito; 19:05:00 → 422 `CODIGO_INVALIDO`.\n\nR6. (P-19, RN-304) Código emitido para um encontro usado em outro → 422 `CODIGO_INVALIDO`.\n\nR7. (P-09, RN-305) Alfabeto `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (com L; sem 0, O, 1, I). A leitura aceita minúscula e ignora espaço. Código ausente ou de tipo errado → 422 `DADOS_INVALIDOS`; caractere fora do alfabeto → 422 `CODIGO_INVALIDO`. Os códigos emitidos usam esse alfabeto e têm 6 caracteres (contrato §5).\n\nR8. (P-13, P-26, P-31, RN-306; status vindo da spec de M2) Só participante com inscrição `confirmada` registra presença (QR ou manual). `em_espera`, `convocada`, `cancelada` ou sem inscrição → 403 `NAO_INSCRITO`. O status da inscrição é o da spec de M2.\n\nR9. (P-06, RN-310) Envio do `lidoEm` até 2 h depois do `fim`, inclusive, contando do `fim` (não do `lidoEm`): fim 22:00 → envio 00:00:00 aceito; 00:00:01 → 422 `SINCRONIZACAO_TARDIA`.\n\nR10. (P-10, P-12, RN-315, RN-309) `origem` = `qr` (sem `lidoEm`), `qr_offline` (com `lidoEm`, inclusive futuro) ou `manual` (rota manual). `lidoEm` no futuro não é erro: vale o instante do envio e a origem continua `qr_offline`.\n\nR11. (P-11, P-27, RN-307, RN-314) Presença já registrada → 200 com a mesma presença, mesmo `id`, nunca cria segunda. A repetição é conferida antes de não inscrito, janela e código: com presença existente, mesmo fora da janela ou com código errado → 200. Enviar leitura offline com o mesmo `lidoEm` de novo → 200 com a mesma presença.\n\nR12. (P-21, P-24, RN-308, RN-301) Com `lidoEm`, a janela (R1/R2) e o código (R5) são conferidos no instante da leitura; sem `lidoEm`, no instante do envio. Sincronização (R9) sempre no envio. Ex.: `lidoEm` = início − 16 min → 422 `FORA_DA_JANELA`.\n\nR13. (P-14, RN-311, RN-314) Justificativa da manual: mín. 10 caracteres. Ausente, vazia ou < 10 → 422 `JUSTIFICATIVA_OBRIGATORIA`; tipo errado → 422 `DADOS_INVALIDOS`. É a primeira regra de recurso conferida na manual.\n\nR14. (P-07, RN-313) Limite de manuais por encontro: 10% das inscrições confirmadas da atividade, arredondando pra cima; a manutenção... \"a N+1ª manual falha\" → 422 `LIMITE_DE_MANAIS`. Ex.: 20 confirmadas → 2; 21 → 3; 5 → 1.\n\nR15. (P-15, RN-312) Janela da manual vai da abertura (15 min antes do `inicio`) até 2 h depois do `fim` — é mais longa que a da presença automática.\n\nR16. (P-08, P-22, P-23, RN-314) Ordem da presença automática (`POST /encontros/:id/presencas`): 404 (`NAO_ENCONTRADO`) → presença existente (200) → não inscrito (`NAO_INSCRITO`) → sincronização tardia (`SINCRONIZACAO_TARDIA`) → fora da janela (`FORA_DA_JANELA`) → código inválido (`CODIGO_INVALIDO`).\n\nR17. (P-26, P-14, P-15, RN-311, RN-312, RN-314) Ordem da presença manual (`POST /encontros/:id/presencas/manual`): justificativa (`JUSTIFICATIVA_OBRIGATORIA`) → presença existente (200) → não inscrito (`NAO_INSCRITO`) → fora da janela (`FORA_DA_JANELA`) → limite de manuais (`LIMITE_DE_MANAIS`). (Corpo `DADOS_INVALIDOS` antes, conforme contrato §1.)\n\nR18. (P-16, P-30, RN-302, RN-217, RN-306, RN-307) Com atividade cancelada: presença QR ou manual → o cancelamento cancela as inscrições (spec de M2 / RN-217), ninguém está `confirmada` → `NAO_INSCRITO`, salvo quem já tem presença → 200. Código em atividade cancelada → `ATIVIDADE_CANCELADA` (R3).\n\nR19. (P-17) `GET /encontros/:id/presencas` retorna em ordem crescente de `registradaEm`; empate por `id`.\n\nR20. (P-18a, contrato §5) Não há rota de edição nem apagamento de presença: tentativa → 404 `NAO_ENCONTRADO`.\n\nR21. (P-18b, contrato §5) Não há check-out: nenhuma rota de saída entre as rotas de M3.\n\nR22. (P-18c, contrato §5) Perfil: `GET /encontros/:id/codigo`, `POST /encontros/:id/presencas/manual` e `GET /encontros/:id/presencas` são de organização (participante → 403 `SOMENTE_ORGANIZACAO`); `POST /encontros/:id/presencas` é de participante (organização → 403 `SOMENTE_PARTICIPANTE`).\n\nR23. (P-20, P-20a, RN-110) Encontros e sala não mudam após a criação da atividade — só título e vagas. A janela de um encontro é fixa e nunca invalida códigos já emitidos.\n\nR24. (P-25, RN-217, P-18a) Presenças continuam listadas depois do cancelamento da atividade — são histórico e não há apagamento.\n\nNow, order in section — I think I should order section rules more cohesive: window rules (R1, R2), código rules (R3-R7), inscrição (R8), offline (R9, R10), repetição (R11), conferência (R12), manual (R13-R15), ordens (R16, R17), cancelada (R18), lista (R19), restrições (R20-R22), perfil (R22), imutabilidade (R23), histórico (R24). That's good.\n\nWait — I have R10 combining origem and future lidoEm (P-10, P-12). Good.\n\nNote that P-12's \"lidoEm no futuro vale como instante do envio\" — but the contract says lidoEm field = \"o instante que valeu para as regras\". So the stored lidoEm for a future case = instante do envio. OK.\n\nNow, section 4 endpoints with entrada/saída. Let me include the request bodies and response shapes briefly, citing contract §5.\n\nNow let me write the file.\n\nFor fatias, let me write:\n\n**F1 — Emitir o código do encontro** (R3, R4, R5, R7 parcial, R22 parcial, R23)\nDepends on M1 (POST /atividades e encontros) and M0 (identificação, relógio). Implement GET /encontros/:id/codigo: código de 6 caracteres do alfabeto, gira no minuto, trocaEm/validoAte, FORA_DA_JANELA, ATIVIDADE_CANCELADA, SOMENTE_ORGANIZACAO.\n\n**F2 — Presença QR online** (R1, R2, R8, R11, R16, R22, R7 leitura)\nDepends on M1 + M2 (inscrições e confirmacao). POST /encontros/:id/presencas sem lidoEm: 201, janela, código válido, inscrição confirmada, repetição 200, ordem das verificações, alfabeto na leitura, SOMENTE_PARTICIPANTE.\n\n**F3 — Presença offline** (R9, R10, R12, R18)\nPOST com lidoEm: origem qr_offline, sincronização tardia, lidoEm futuro, janela/código no lidoEm, cancelamento.\n\n**F4 — Presença manual** (R13, R14, R15, R17, R8 manual)\nPOST /encontros/:id/presencas/manual: justificativa, limite de manuais, janela manual, ordem manual, inscrição confirmada, SOMENTE_ORGANIZACAO.\n\n**F5 — Lista de presenças** (R19, R20, R21, R22, R24)\nGET /encontros/:id/presencas: ordenação, continua listando após cancelamento, sem rotas de edição/delete/check-out.\n\nLet me write the acceptance criteria matching rule coverage per the skill.\n\nAlso I want to double check the P references exist in entrevista. Rules cite P-01..P-31 (except P-28 which is RETIRADA). Good.\n\nOne more check: \"cargaHorariaMinutos\" or other stuff — not M3. Fine.\n\nLet me also double-check whether presenças are per encontro or per atividade. Contract: POST /encontros/:id/presencas → Presenca with encontroId. So per encontro. Good.\n\nNow, limite de manuais: \"por encontro\" — I'll phrase per encontro (each proved by N+1ª manual on the encontro).\n\nNow write the spec file.\n\nOne more thing — the skill says: \"Depois de escrever, mostre ao usuário a lista das regras numeradas — só os números e uma linha cada — e pergunte se falta alguma.\" So after writing, I present the rules list and ask.\n\nLet me write the file now.\n\nFor section 4 endpoints table — include who and success. And request bodies below.\n\nLet me draft the full markdown.",
+     "time": {
+      "start": 1789666003970,
+      "end": 1789666107055
+     },
+     "id": "prt_0b0680c020014Ndo3RCcn41yrZ",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b0680849001wsjwqXGGPjjwoS"
+    },
+    {
+     "type": "text",
+     "text": "Vou escrever a spec agora.",
+     "time": {
+      "start": 1789666107065,
+      "end": 1789666135393
+     },
+     "id": "prt_0b0699eb9001CoV6OqRxla2K0V",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b0680849001wsjwqXGGPjjwoS"
+    },
+    {
+     "type": "tool",
+     "tool": "write",
+     "callID": "call_7f5566267c56461aabf2b7e7",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\specs\\M3-presenca.md",
+       "content": "# Spec — M3 Presença por QR\n\n## 1. Objetivo\n\nRegistrar e consultar presença nos encontros da Semana Acadêmica por QR code.\nA organização emite, por encontro, um código de 6 caracteres que gira a cada\nminuto; o participante o lê — online ou offline — dentro da janela do encontro e\nganha uma `Presenca`. A organização também pode registrar presença manual com\njustificativa. A janela de presença é fixa e imutável: abre 15 minutos antes do\n`inicio` e fecha 30 minutos depois (30 min depois do `fim`, no caso de manual).\n\nCada regra cita a pergunta (P-xx) da entrevista `entrevistas/M3-presenca.md` que\na originou e a regra do documento (RN-xxx). Dependências de estado de inscrição e\nde encontro vêm das specs de M2 e M1.\n\n## 2. Fora de escopo\n\n- Correção e apagamento de presença — não há rota de edição/delete. (P-18a, contrato §5)\n- Check-out (saída) — não há rota de saída em M3. (P-18b, contrato §5)\n- Cálculo de frequência — pertence a RN-404/RN-504 (frequência e certificados). (P-18d)\n- Notificação ao participante — M3 não envia notificação. (P-18d)\n- Fila offline no servidor — a fila offline vive só na tela/app; o servidor não a guarda. (P-18d)\n- Alteração de encontros e troca de sala — encontros e sala não mudam após a criação da\n  atividade; só título e vagas são editáveis. (P-20, P-20a, RN-110)\n- Presença para quem não é participante — rotas exigem o perfil do contrato (R22). (P-18c)\n\n## 3. Modelo\n\n### 3.1 CodigoDoEncontro\n\n| Campo | Tipo | Origem |\n|---|---|---|\n| encontroId | string | calculado — id do encontro vindo de M1 |\n| codigo | string | calculado — 6 caracteres do alfabeto de R7 |\n| trocaEm | datetime | calculado — próximo `hh:mm:00` do relógio |\n| validoAte | datetime | calculado — `trocaEm` + 1 minuto |\n\n### 3.2 Presenca\n\n| Campo | Tipo | Origem |\n|---|---|---|\n| id | string | gerado — `pre_` + 8 hex minúsculos (contrato §1) |\n| encontroId | string | derivado da rota (`/encontros/:id/`) |\n| participanteId | string | derivado — `X-Usuario` na rota de QR; `participanteId` do corpo na manual |\n| origem | string | calculado — `qr` \\| `qr_offline` \\| `manual` (R10) |\n| lidoEm | datetime | informado (opcional) ou = instante do envio quando ausente/futuro |\n| registradaEm | datetime | calculado — instante do envio |\n| justificativa | string | informado — só na manual; `null` caso contrário |\n\n## 4. Endpoints\n\n| Método | Rota | Quem | Sucesso |\n|---|---|---|---|\n| GET | `/encontros/:id/codigo` | organização | 200 `CodigoDoEncontro` |\n| POST | `/encontros/:id/presencas` | participante | 201 `Presenca` na primeira vez; 200 `Presenca` depois (repetição) |\n| POST | `/encontros/:id/presencas/manual` | organização | 201 `Presenca` na primeira vez; 200 `Presenca` depois |\n| GET | `/encontros/:id/presencas` | organização | 200 `[Presenca]` |\n\n```jsonc\n// POST /encontros/:id/presencas — entrada\n{ \"codigo\": \"K7M2QX\", \"lidoEm\": \"…\" }        // lidoEm é opcional (contrato §5)\n\n// POST /encontros/:id/presencas/manual — entrada\n{ \"participanteId\": \"p-carla\", \"justificativa\": \"…\" }   // justificativa ausente também é JUSTIFICATIVA_OBRIGATORIA\n```\n\n## 5. Regras\n\nR1. A janela de presença abre 15 minutos antes do `inicio`, borda incluída.\n`inicio` 19:00 → 18:45:00 aceita; 18:44:59 → 422 `FORA_DA_JANELA`. (P-01, RN-301)\n\nR2. A janela de presença fecha 30 minutos depois do `inicio` (não do `fim`),\nborda incluída. `inicio` 19:00 → 19:30:00 aceita; 19:30:01 → 422 `FORA_DA_JANELA`.\n(P-02, RN-301)\n\nR3. `GET /encontros/:id/codigo` usa a mesma janela da presença: fora dela →\n422 `FORA_DA_JANELA`, e a organização nem obtém o código. Atividade cancelada →\n422 `ATIVIDADE_CANCELADA`. (P-03, RN-302)\n\nR4. O código gira a cada minuto, alinhado ao relógio do modo de teste: de\n`hh:mm:00` a `hh:mm:59` vale um código, e `trocaEm` aponta o próximo `hh:mm:00`.\nDentro do mesmo minuto, o código, o `trocaEm` e o `validoAte` são sempre os\nmesmos; ao cruzar o minuto, giram. (P-04, P-29, RN-303)\n\nR5. Um código emitido vale para o minuto atual e o anterior: `validoAte` =\n`trocaEm` + 1 minuto. Ex.: código das 19:03 → `trocaEm` 19:04:00, `validoAte`\n19:05:00; envio 19:04:59 aceito; no instante 19:05:00 → 422 `CODIGO_INVALIDO`.\n(P-05, RN-304)\n\nR6. Código emitido para um encontro, submetido em outro → 422 `CODIGO_INVALIDO`.\n(P-19, RN-304)\n\nR7. Alfabeto do código: `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (tem L; não tem 0,\nO, 1, I). O código emitido tem 6 caracteres desse alfabeto (contrato §5). A\nleitura aceita minúscula e ignora espaço. Código ausente ou de tipo errado →\n422 `DADOS_INVALIDOS`; caractere fora do alfabeto → 422 `CODIGO_INVALIDO`.\n(P-09, RN-305)\n\nR8. Só participante com inscrição `confirmada` registra presença, na rota de QR\nou na manual. `em_espera`, `convocada`, `cancelada` ou sem inscrição →\n403 `NAO_INSCRITO`. O status da inscrição é o da **spec de M2** (P-31). (P-13,\nP-26, P-31, RN-306)\n\nR9. O envio de um `lidoEm` é aceito até 2 horas depois do `fim`, borda incluída,\ncontando do `fim` (não do `lidoEm`). `fim` 22:00 → envio 00:00:00 aceito;\n00:00:01 → 422 `SINCRONIZACAO_TARDIA`. (P-06, RN-310)\n\nR10. `origem` da presença: `qr` = lida e enviada na hora (sem `lidoEm`);\n`qr_offline` = veio com `lidoEm`; `manual` = rota manual. (P-10, P-12, RN-315,\nRN-309)\n\nR11. Presença já registrada naquele encontro → 200 com a mesma presença, mesmo\n`id`, sem criar segunda. A repetição é conferida **antes** de não inscrito, janela\ne código: com presença existente, mesmo fora da janela ou com código errado → 200.\nReenvio offline do mesmo `lidoEm` → 200 com a mesma presença. (P-11, P-27,\nRN-307, RN-314)\n\nR12. Com `lidoEm`, a janela (R1/R2) e o código (R5) são conferidos no instante\nda leitura; sem `lidoEm`, no instante do envio. A sincronização (R9) é sempre\nconferida no envio. Ex.: `lidoEm` = `inicio` − 16 min → 422 `FORA_DA_JANELA`.\n`lidoEm` no futuro não é erro — vale o instante do envio, origem continua\n`qr_offline`. (P-21, P-24, P-12, RN-308, RN-301, RN-309)\n\nR13. Na presença manual, a `justificativa` tem no mínimo 10 caracteres. Ausente,\nvazia ou menor que 10 → 422 `JUSTIFICATIVA_OBRIGATORIA`; tipo errado →\n422 `DADOS_INVALIDOS`. É a primeira regra de recurso conferida na manual. (P-14,\nRN-311, RN-314)\n\nR14. Limite de presenças manuais por encontro: 10% das inscrições confirmadas da\natividade, arredondando para cima; a tentativa N+1ª → 422 `LIMITE_DE_MANUAIS`.\nEx.: 20 confirmadas → 2; 21 → 3; 5 → 1. (P-07, RN-313)\n\nR15. A janela da manual vai da abertura da janela (15 min antes do `inicio`) até\n2 horas depois do `fim` — é mais longa que a janela da presença automática.\n(P-15, RN-312)\n\nR16. Ordem das verificações da presença automática (`POST /encontros/:id/presencas`):\n404 `NAO_ENCONTRADO` → presença existente (200) → não inscrito (`NAO_INSCRITO`) →\nsincronização tardia (`SINCRONIZACAO_TARDIA`) → fora da janela (`FORA_DA_JANELA`)\n→ código inválido (`CODIGO_INVALIDO`). (P-08, P-22, P-23, RN-314)\n\nR17. Ordem das verificações da presença manual (`POST /encontros/:id/presencas/manual`):\ncorpo (422 `DADOS_INVALIDOS`) → justificativa (`JUSTIFICATIVA_OBRIGATORIA`) →\npresença existente (200) → não inscrito (`NAO_INSCRITO`) → fora da janela\n(`FORA_DA_JANELA`) → limite de manuais (`LIMITE_DE_MANUAIS`). (P-14, P-26,\nRN-311, RN-314)\n\nR18. Com atividade cancelada, presença QR ou manual: o cancelamento cancela as\ninscrições (spec de M2 — RN-217), então ninguém está `confirmada` →\n403 `NAO_INSCRITO`, salvo quem já tem presença, que recebe 200. Código em\natividade cancelada → `ATIVIDADE_CANCELADA` (R3). (P-16, P-30, RN-302, RN-217,\nRN-306, RN-307)\n\nR19. `GET /encontros/:id/presencas` retorna a lista em ordem crescente de\n`registradaEm`; empate por `id`. (P-17)\n\nR20. Não há rota de edição nem de apagamento de presença — tentativa →\n404 `NAO_ENCONTRADO`. (P-18a, contrato §5)\n\nR21. Não há check-out: nenhuma rota de saída entre as rotas de M3. (P-18b,\ncontrato §5)\n\nR22. Perfil das rotas: `GET /encontros/:id/codigo`, `POST /encontros/:id/presencas/manual`\ne `GET /encontros/:id/presencas` são de organização → participante recebe\n403 `SOMENTE_ORGANIZACAO`; `POST /encontros/:id/presencas` é de participante →\norganização recebe 403 `SOMENTE_PARTICIPANTE`. (P-18c, contrato §5)\n\nR23. Encontros e sala não mudam depois de criada a atividade — só título e vagas\n(PATCH de M1). A janela de um encontro é fixa por construção e nunca muda nem\ninvalida códigos já emitidos. (P-20, P-20a, RN-110)\n\nR24. Presenças continuam listadas depois do cancelamento da atividade: presença é\nhistórico e não há apagamento (R20). Cancelar cancela inscrições, não presenças.\n(P-25, RN-217, P-18a)\n\n## 6. Critérios de aceite\n\n1. (R1, R16) Relógio 18:44:59, `inicio` 19:00 → POST `/encontros/:id/presencas`\n   com código válido → 422 `FORA_DA_JANELA`; em 18:45:00 → 201.\n2. (R2, R16) Relógio 19:30:00 → 201; 19:30:01 → 422 `FORA_DA_JANELA`.\n3. (R3) `GET /encontros/:id/codigo` em 18:45:00 (15 min antes do `inicio`) → 200;\n   em 18:44:59 → 422 `FORA_DA_JANELA`; atividade cancelada → 422 `ATIVIDADE_CANCELADA`.\n4. (R4, P-29) Dois `GET` no mesmo minuto → mesmo `codigo`, `trocaEm` e `validoAte`;\n   cruzar o minuto → `trocaEm` = próximo `hh:mm:00` e código novo.\n5. (R5) Código das 19:03; envio 19:04:59 → 201; envio 19:05:00 → 422 `CODIGO_INVALIDO`.\n6. (R6) Código emitido para `enc_1`, enviado em `enc_2` → 422 `CODIGO_INVALIDO`.\n7. (R7) Código em minúscula → 201; com espaço → 201; um dos caracteres proibidos\n   (0, O, 1, I) no lugar → 422 `CODIGO_INVALIDO`; `codigo` ausente →\n   422 `DADOS_INVALIDOS`.\n8. (R8, R16) Participante com inscrição `em_espera`, `convocada` ou `cancelada`,\n   ou sem inscrição → 403 `NAO_INSCRITO`; `confirmada` → 201. (status da spec de M2)\n9. (R9, R12) `lidoEm` 19:10 (dentro da janela), envio 23:59 (= `fim` 22:00 + 2h)\n   → 201; envio 00:00:01 → 422 `SINCRONIZACAO_TARDIA`.\n10. (R10) POST sem `lidoEm` → `origem` `qr`; com `lidoEm` → `qr_offline`; rota\n    manual → `manual`.\n11. (R11) Repetir POST → 200 com o mesmo `id`; presença existente + fora da janela\n    → 200; presença existente + código errado → 200; reenvio com o mesmo `lidoEm`\n    → 200 com o mesmo `id`, e a lista tem uma só presença.\n12. (R12) `lidoEm` = envio + 1 min → 201, grava o instante do envio, origem\n    `qr_offline`; `lidoEm` = `inicio` − 16 min → 422 `FORA_DA_JANELA`.\n13. (R13) Manual com `justificativa` ausente, vazia ou `\"abc\"` →\n    422 `JUSTIFICATIVA_OBRIGATORIA`; tipo errado → 422 `DADOS_INVALIDOS`;\n    `\"justificativa de 10+\"` → segue.\n14. (R14) `N` = teto(10% das confirmadas); N manuais aceitas; a N+1ª →\n    422 `LIMITE_DE_MANUAIS`.\n15. (R15) Manual em 20:00 (após 19:30, dentro de `fim` 22:00 + 2h) → 201; após\n    `fim` + 2h → 422 `FORA_DA_JANELA`.\n16. (R16) Fora da janela + código errado → 422 `FORA_DA_JANELA`; não inscrito +\n    fora da janela + código válido → 403 `NAO_INSCRITO`; código errado + envio\n    tardio → 422 `SINCRONIZACAO_TARDIA`; encontro inexistente → 404 `NAO_ENCONTRADO`.\n17. (R17) Manual de participante `em_espera` com justificativa curta →\n    422 `JUSTIFICATIVA_OBRIGATORIA` (justificativa primeiro); com justificativa\n    válida → 403 `NAO_INSCRITO`; `em_espera` sem presença → `NAO_INSCRITO`.\n18. (R18) Cancelar a atividade; POST de quem já tem presença → 200; de quem não\n    tem → 403 `NAO_INSCRITO`; `GET /encontros/:id/codigo` → 422 `ATIVIDADE_CANCELADA`.\n19. (R19) Duas presenças → lista em ordem crescente de `registradaEm`; empate →\n    ordem por `id`.\n20. (R20, R21) Tentar rota de edição/apagamento de presença ou de check-out →\n    404 `NAO_ENCONTRADO`.\n21. (R22) Organização em `POST /encontros/:id/presencas` → 403 `SOMENTE_PARTICIPANTE`;\n    participante em `GET /encontros/:id/codigo` → 403 `SOMENTE_ORGANIZACAO`.\n22. (R23) Emitido um código e feito PATCH de título/vagas em M1, `GET` no mesmo\n    minuto → mesmo código, janela e validade inalterados.\n23. (R24) Registrar presença; cancelar a atividade; `GET /encontros/:id/presencas`\n    → a presença continua na lista.\n\n## 7. Como isto será verificado\n\nTestes HTTP diretos, chamando a API por `fetch` via `node --test`, sem rota fora\ndo contrato. Cada teste sobe a API (ou usa instância rodando com `MODO_TESTE=1`),\nfaz `POST /_teste/reset`, anda o relógio com `PUT /_teste/relogio` e valida status\ne corpo (`erro`, `origem`, `id`, ordem da lista). Os testes dependem de M1 e M2\npara criar atividade/encontros e inscrições com os mesmos `POST` do contrato — a\ncostura é a HTTP, a mesma que o juiz usa.\n\n## 8. Fatias de entrega\n\nDependências transversais: M0 (identificação, relógio, formato de erro) e M1\n(atividades e encontros). A partir de F2, também M2 (inscrições e `confirmacao`).\n\n**F1 — Emitir o código do encontro** (R3, R4, R5, R7 emitido, R22 parcial, R23)\nImplementar `GET /encontros/:id/codigo`: código de 6 caracteres do alfabeto de R7,\nmesmo código dentro do minuto, giro ao cruzar o minuto, `trocaEm` e `validoAte`,\n`FORA_DA_JANELA`, `ATIVIDADE_CANCELADA` e `SOMENTE_ORGANIZACAO`. Depende de M1\npara existir um encontro.\n\n**F2 — Presença QR online** (R1, R2, R7 leitura, R8, R11, R16, R22)\nImplementar `POST /encontros/:id/presencas` sem `lidoEm`: 201 na primeira vez,\njanela (R1/R2), código válido e alfabeto (R5/R7), inscrição confirmada (R8),\nrepetição 200 (R11), ordem das verificações (R16) e `SOMENTE_PARTICIPANTE`.\nDepende de M1 + M2.\n\n**F3 — Presença offline** (R9, R10, R12, R18)\nCom `lidoEm` no corpo: origem `qr_offline`, sincronização tardia (R9), janela e\ncódigo no instante da leitura (R12), `lidoEm` futuro (R12/R10) e atividade\ncancelada (R18).\n\n**F4 — Presença manual** (R13, R14, R15, R17)\nImplementar `POST /encontros/:id/presencas/manual`: justificativa (R13), limite de\nmanuais (R14), janela manual (R15), ordem da manual (R17), inscrição confirmada\n(R8) e `SOMENTE_ORGANIZACAO`.\n\n**F5 — Lista de presenças** (R19, R20, R21, R22, R24)\nImplementar `GET /encontros/:id/presencas`: ordem por `registradaEm`/`id` (R19),\nlista persiste após cancelamento (R24) e ausência de rotas de edição, apagamento\ne check-out — qualquer tentativa responde 404 (R20, R21)."
+      },
+      "output": "Wrote file successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "filepath": "C:\\semana-academica\\specs\\M3-presenca.md",
+       "exists": false,
+       "truncated": false
+      },
+      "title": "specs\\M3-presenca.md",
+      "time": {
+       "start": 1789666135325,
+       "end": 1789666135349
+      }
+     },
+     "id": "prt_0b0699f1f001QTagVv0yVU4JJw",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b0680849001wsjwqXGGPjjwoS"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "ca3c340d612d53fe52fbf86c75a5cdafe8669bd0",
+     "type": "step-finish",
+     "tokens": {
+      "total": 46677,
+      "input": 1914,
+      "output": 19419,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 25344
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b06a0ed3001KiUdW5jCwIb2wW",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b0680849001wsjwqXGGPjjwoS"
+    },
+    {
+     "type": "patch",
+     "hash": "7f34b70d06b9d84f9e470309571c751596e2f47a",
+     "files": [
+      "C:/semana-academica/specs/M3-presenca.md"
+     ],
+     "id": "prt_0b06a0fa5001gxD9Wz3pYfkfxE",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b0680849001wsjwqXGGPjjwoS"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b067f275001bY6ohBTt4OE7CN",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 47280,
+     "input": 12900,
+     "output": 588,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 33792
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789666135984,
+     "completed": 1789666140576
+    },
+    "finish": "stop",
+    "id": "msg_0b06a0fb0001bGe3FeMS6f7rqt",
+    "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh"
+   },
+   "parts": [
+    {
+     "snapshot": "ca3c340d612d53fe52fbf86c75a5cdafe8669bd0",
+     "type": "step-start",
+     "id": "prt_0b06a1513001D60Ui9i4LNN8gz",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b06a0fb0001bGe3FeMS6f7rqt"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now per the skill, I should show the user the list of numbered rules and ask if anything is missing.",
+     "time": {
+      "start": 1789666137452,
+      "end": 1789666137690
+     },
+     "id": "prt_0b06a156b001sSO7s039Hyhh1V",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b06a0fb0001bGe3FeMS6f7rqt"
+    },
+    {
+     "type": "text",
+     "text": "Spec escrita em `specs/M3-presenca.md`. Regras:\n\n- R1 janela abre 15 min antes do início (P-01)\n- R2 janela fecha 30 min depois do início (P-02)\n- R3 código usa a mesma janela; cancelada → `ATIVIDADE_CANCELADA` (P-03)\n- R4 código gira por minuto; `trocaEm` = próximo hh:mm:00 (P-04, P-29)\n- R5 código vale do minuto atual + anterior; `validoAte` = trocaEm + 1min (P-05)\n- R6 código de outro encontro → `CODIGO_INVALIDO` (P-19)\n- R7 alfabeto, 6 caracteres, minúscula, espaço (P-09)\n- R8 só inscrição `confirmada` (fonte: spec M2) (P-13, P-26, P-31)\n- R9 sincronização até fim + 2h inclusivo (P-06)\n- R10 `origem` qr / qr_offline / manual (P-10, P-12)\n- R11 repetição → 200 mesmo id, antes de tudo (P-11, P-27)\n- R12 janela/código no `lidoEm`; sincronização no envio; lidoEm futuro (P-21, P-24, P-12)\n- R13 justificativa mín. 10 caracteres (P-14)\n- R14 limite de manuais = teto(10% confirmadas) (P-07)\n- R15 janela manual: 15 min antes do início até fim + 2h (P-15)\n- R16 ordem da presença automática (P-08, P-22, P-23)\n- R17 ordem da presença manual (P-14, P-26)\n- R18 atividade cancelada → `NAO_INSCRITO`, salvo presença existente (P-16, P-30)\n- R19 lista por `registradaEm`, empate por `id` (P-17)\n- R20 sem edição/apagamento de presença (P-18a)\n- R21 sem check-out (P-18b)\n- R22 perfil das rotas (P-18c)\n- R23 janela imutável; só título/vagas editáveis (P-20, P-20a)\n- R24 presenças persistem após cancelamento (P-25)\n\nFalta alguma regra?",
+     "time": {
+      "start": 1789666137695,
+      "end": 1789666140175
+     },
+     "id": "prt_0b06a165f0017RgAOAJ5lgioef",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b06a0fb0001bGe3FeMS6f7rqt"
+    },
+    {
+     "reason": "stop",
+     "snapshot": "ca3c340d612d53fe52fbf86c75a5cdafe8669bd0",
+     "type": "step-finish",
+     "tokens": {
+      "total": 47280,
+      "input": 12900,
+      "output": 588,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 33792
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b06a20da001zvNx5FrVNq5Y9s",
+     "sessionID": "ses_f4f980d9affe2GtgKbEdqJ2uGh",
+     "messageID": "msg_0b06a0fb0001bGe3FeMS6f7rqt"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,1790 @@
+{
+ "info": {
+  "id": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+  "slug": "sunny-sailor",
+  "projectID": "cbf5108e60a26b3873bb8ce01325422ff122ab1c",
+  "directory": "C:\\semana-academica",
+  "path": "",
+  "title": "Resposta de Atividade sem campo cancelada",
+  "agent": "build",
+  "model": {
+   "id": "big-pickle",
+   "providerID": "opencode"
+  },
+  "version": "1.18.31",
+  "summary": {
+   "additions": 0,
+   "deletions": 0,
+   "files": 0
+  },
+  "cost": 0,
+  "tokens": {
+   "input": 58934,
+   "output": 4867,
+   "reasoning": 0,
+   "cache": {
+    "read": 600320,
+    "write": 0
+   }
+  },
+  "time": {
+   "created": 1789682517110,
+   "updated": 1789682586313
+  }
+ },
+ "messages": [
+  {
+   "info": {
+    "role": "user",
+    "time": {
+     "created": 1789682517122
+    },
+    "agent": "build",
+    "model": {
+     "providerID": "opencode",
+     "modelID": "big-pickle"
+    },
+    "summary": {
+     "diffs": [
+      {
+       "file": "api/src/atividades.js",
+       "patch": "Index: api/src/atividades.js\n===================================================================\n--- api/src/atividades.js\t\n+++ api/src/atividades.js\t\n@@ -1,251 +1,257 @@\n import { salaExiste, capacidadeDe } from './salas.js'\r\n import { agora } from './relogio.js'\r\n import {\r\n   processarEsperaDa,\r\n   contadoresDe,\r\n   cancelarInscricoesDaAtividade\r\n } from './inscricoes.js'\r\n \r\n let atividades = []\r\n \r\n function hex8() {\r\n   return Array.from(crypto.getRandomValues(new Uint8Array(4)), b =>\r\n     b.toString(16).padStart(2, '0')\r\n   ).join('')\r\n }\r\n \r\n const camposObrigatorios = {\r\n   titulo: 'string',\r\n   tipo: 'string',\r\n   salaId: 'string',\r\n   vagas: 'number',\r\n   encontros: 'array'\r\n }\r\n \r\n const tiposValidos = ['palestra', 'minicurso']\r\n \r\n function corpoEhValido(dados) {\r\n   const camposOk = Object.entries(camposObrigatorios).every(([campo, tipo]) => {\r\n     if (tipo === 'array') {\r\n       return Array.isArray(dados[campo])\r\n     }\r\n     return typeof dados[campo] === tipo\r\n   })\r\n   const vagasOk = Number.isInteger(dados.vagas) && dados.vagas >= 1\r\n   return camposOk && vagasOk && tiposValidos.includes(dados.tipo)\r\n }\r\n \r\n function quantidadeEhValida({ tipo, encontros }) {\r\n   return tipo === 'palestra' ? encontros.length === 1 : encontros.length >= 2 && encontros.length <= 5\r\n }\r\n \r\n function duracaoEhValida({ inicio, fim }) {\r\n   const minutos = (Date.parse(fim) - Date.parse(inicio)) / 60000\r\n   return minutos >= 60 && minutos <= 240\r\n }\r\n \r\n const JANELA_INICIO = Date.parse('2026-10-19T00:00:00-03:00')\r\n const JANELA_FIM = Date.parse('2026-10-24T00:00:00-03:00')\r\n \r\n function diaEmBrasilia(instante) {\r\n   const d = new Date(instante - 3 * 3600 * 1000)\r\n   return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate()\r\n }\r\n \r\n function periodoEhValido({ inicio, fim }) {\r\n   const ini = Date.parse(inicio)\r\n   const fimMs = Date.parse(fim)\r\n   return (\r\n     diaEmBrasilia(ini) === diaEmBrasilia(fimMs) &&\r\n     ini >= JANELA_INICIO &&\r\n     fimMs < JANELA_FIM\r\n   )\r\n }\r\n \r\n function encontrosSemSobreposicao(encontros) {\r\n   const ordenados = [...encontros].sort(\r\n     (a, b) => Date.parse(a.inicio) - Date.parse(b.inicio)\r\n   )\r\n   return ordenados.every(\r\n     (encontro, i) =>\r\n       i === 0 || Date.parse(encontro.inicio) > Date.parse(ordenados[i - 1].fim)\r\n   )\r\n }\r\n \r\n const INTERVALO_SALA_MIN = 15 * 60 * 1000\r\n \r\n function situacaoDa(atividade) {\r\n   if (atividade.cancelada) {\r\n     return 'cancelada'\r\n   }\r\n   const agoraMs = Date.parse(agora())\r\n   const primeiro = Date.parse(atividade.encontros[0].inicio)\r\n   const ultimo = Date.parse(atividade.encontros[atividade.encontros.length - 1].fim)\r\n   if (agoraMs >= ultimo) {\r\n     return 'encerrada'\r\n   }\r\n   if (agoraMs >= primeiro) {\r\n     return 'em_andamento'\r\n   }\r\n   return 'prevista'\r\n }\r\n \r\n function formatar(atividade) {\r\n   const { ocupadas, emEspera } = contadoresDe(atividade.id)\r\n   return {\r\n-    ...atividade,\r\n+    id: atividade.id,\r\n+    titulo: atividade.titulo,\r\n+    tipo: atividade.tipo,\r\n+    salaId: atividade.salaId,\r\n+    vagas: atividade.vagas,\r\n+    encontros: atividade.encontros,\r\n+    cargaHorariaMinutos: atividade.cargaHorariaMinutos,\r\n     situacao: situacaoDa(atividade),\r\n     ocupadas,\r\n     vagasRestantes: atividade.vagas - ocupadas,\r\n     emEspera\r\n   }\r\n }\r\n \r\n function encontrosConflitam(a, b) {\r\n   const [x, y] =\r\n     Date.parse(a.inicio) <= Date.parse(b.inicio) ? [a, b] : [b, a]\r\n   return Date.parse(y.inicio) < Date.parse(x.fim) + INTERVALO_SALA_MIN\r\n }\r\n \r\n function temConflitoDeSala(encontroNovo, salaId) {\r\n   return atividades.some(\r\n     atv =>\r\n       atv.salaId === salaId &&\r\n       !atv.cancelada &&\r\n       atv.encontros.some(e => encontrosConflitam(encontroNovo, e))\r\n   )\r\n }\r\n \r\n export function criarAtividade(dados) {\r\n   if (typeof dados.salaId === 'string' && !salaExiste(dados.salaId)) {\r\n     return { erro: 'NAO_ENCONTRADO' }\r\n   }\r\n   if (!corpoEhValido(dados)) {\r\n     return null\r\n   }\r\n   if (!quantidadeEhValida(dados)) {\r\n     return { erro: 'QUANTIDADE_DE_ENCONTROS' }\r\n   }\r\n   if (!dados.encontros.every(duracaoEhValida)) {\r\n     return { erro: 'ENCONTRO_INVALIDO' }\r\n   }\r\n   if (!dados.encontros.every(periodoEhValido)) {\r\n     return { erro: 'ENCONTRO_INVALIDO' }\r\n   }\r\n   if (!encontrosSemSobreposicao(dados.encontros)) {\r\n     return { erro: 'ENCONTRO_INVALIDO' }\r\n   }\r\n   if (dados.vagas > capacidadeDe(dados.salaId)) {\r\n     return { erro: 'VAGAS_ACIMA_DA_CAPACIDADE' }\r\n   }\r\n   if (dados.encontros.some(e => temConflitoDeSala(e, dados.salaId))) {\r\n     return { erro: 'CONFLITO_DE_SALA' }\r\n   }\r\n   const encontros = [...dados.encontros]\r\n     .sort((a, b) => Date.parse(a.inicio) - Date.parse(b.inicio))\r\n     .map(e => ({ id: `enc_${hex8()}`, inicio: e.inicio, fim: e.fim }))\r\n   const cargaHorariaMinutos = encontros.reduce(\r\n     (soma, e) => soma + (Date.parse(e.fim) - Date.parse(e.inicio)) / 60000,\r\n     0\r\n   )\r\n   const atividade = {\r\n     id: `atv_${hex8()}`,\r\n     titulo: dados.titulo,\r\n     tipo: dados.tipo,\r\n     salaId: dados.salaId,\r\n     vagas: dados.vagas,\r\n     encontros,\r\n     cargaHorariaMinutos,\r\n     cancelada: false,\r\n     ocupadas: 0,\r\n     vagasRestantes: dados.vagas,\r\n     emEspera: 0\r\n   }\r\n   atividades.push(atividade)\r\n   return formatar(atividade)\r\n }\r\n \r\n const FORMATO_DIA = /^\\d{4}-\\d{2}-\\d{2}$/\r\n \r\n export function listarAtividades(filtros = {}) {\r\n   if (filtros.dia !== undefined && !FORMATO_DIA.test(filtros.dia)) {\r\n     return { erro: 'DADOS_INVALIDOS' }\r\n   }\r\n   if (filtros.tipo !== undefined && !tiposValidos.includes(filtros.tipo)) {\r\n     return { erro: 'DADOS_INVALIDOS' }\r\n   }\r\n   const dia = filtros.dia\r\n     ? Number(String(filtros.dia).replaceAll('-', ''))\r\n     : null\r\n   const tipo = filtros.tipo\r\n   return atividades\r\n     .map(formatar)\r\n     .filter(\r\n       a =>\r\n         (dia === null ||\r\n           a.encontros.some(e => diaEmBrasilia(Date.parse(e.inicio)) === dia)) &&\r\n         (tipo === undefined || a.tipo === tipo)\r\n     )\r\n     .sort(\r\n       (a, b) =>\r\n         Date.parse(a.encontros[0].inicio) - Date.parse(b.encontros[0].inicio) ||\r\n         (a.titulo < b.titulo ? -1 : a.titulo > b.titulo ? 1 : 0)\r\n     )\r\n }\r\n \r\n export function buscarAtividade(id) {\r\n   const atividade = atividades.find(a => a.id === id)\r\n   return atividade ? formatar(atividade) : null\r\n }\r\n \r\n export function alterarAtividade(id, dados) {\r\n   const atividade = atividades.find(a => a.id === id)\r\n   if (!atividade) {\r\n     return { erro: 'NAO_ENCONTRADO' }\r\n   }\r\n   if (atividade.cancelada) {\r\n     return { erro: 'ATIVIDADE_CANCELADA' }\r\n   }\r\n   if (situacaoDa(atividade) !== 'prevista') {\r\n     return { erro: 'CAMPO_NAO_EDITAVEL' }\r\n   }\r\n   const camposEditaveis = ['titulo', 'vagas']\r\n   const chaves = dados ? Object.keys(dados) : []\r\n   if (chaves.some(c => !camposEditaveis.includes(c))) {\r\n     return { erro: 'CAMPO_NAO_EDITAVEL' }\r\n   }\r\n   if ('vagas' in dados && dados.vagas > capacidadeDe(atividade.salaId)) {\r\n     return { erro: 'VAGAS_ACIMA_DA_CAPACIDADE' }\r\n   }\r\n   if ('vagas' in dados && dados.vagas < contadoresDe(atividade.id).ocupadas) {\r\n     return { erro: 'VAGAS_ABAIXO_DOS_INSCRITOS' }\r\n   }\r\n   if ('vagas' in dados) {\r\n     atividade.vagas = dados.vagas\r\n   }\r\n   if ('titulo' in dados) {\r\n     atividade.titulo = dados.titulo\r\n   }\r\n   processarEsperaDa(atividade.id)\r\n   return formatar(atividade)\r\n }\r\n \r\n export function cancelarAtividade(id) {\r\n   const atividade = atividades.find(a => a.id === id)\r\n   if (!atividade) {\r\n     return { erro: 'NAO_ENCONTRADO' }\r\n   }\r\n   if (atividade.cancelada) {\r\n     return { erro: 'ATIVIDADE_CANCELADA' }\r\n   }\r\n   if (situacaoDa(atividade) !== 'prevista') {\r\n     return { erro: 'ATIVIDADE_JA_INICIADA' }\r\n   }\r\n   atividade.cancelada = true\r\n   cancelarInscricoesDaAtividade(atividade.id)\r\n   return formatar(atividade)\r\n }\r\n \r\n export function resetAtividades() {\r\n   atividades = []\r\n }\n\\ No newline at end of file\n",
+       "additions": 7,
+       "deletions": 1,
+       "status": "modified"
+      },
+      {
+       "file": "api/src/inscricoes.js",
+       "patch": "Index: api/src/inscricoes.js\n===================================================================\n--- api/src/inscricoes.js\t\n+++ api/src/inscricoes.js\t\n@@ -1,310 +1,310 @@\n import { buscarAtividade } from './atividades.js'\r\n import { agora } from './relogio.js'\r\n \r\n let inscricoes = []\r\n \r\n function hex8() {\r\n   return Array.from(crypto.getRandomValues(new Uint8Array(4)), b =>\r\n     b.toString(16).padStart(2, '0')\r\n   ).join('')\r\n }\r\n \r\n export function inscrever(atividadeId, participanteId) {\r\n   processarEsperaDa(atividadeId)\r\n   const atividade = buscarAtividade(atividadeId)\r\n   if (!atividade) {\r\n     return { erro: 'NAO_ENCONTRADO' }\r\n   }\r\n-  if (atividade.cancelada) {\r\n+  if (atividade.situacao === 'cancelada') {\r\n     return { erro: 'ATIVIDADE_CANCELADA' }\r\n   }\r\n   const FECHAM_ANTES = 30 * 60 * 1000\r\n   const inicioPrimeiroEncontro = Date.parse(atividade.encontros[0].inicio)\r\n   if (Date.parse(agora()) >= inicioPrimeiroEncontro - FECHAM_ANTES) {\r\n     return { erro: 'INSCRICOES_ENCERRADAS' }\r\n   }\r\n   const ativa = ['confirmada', 'em_espera', 'convocada']\r\n   const jaInscrito = inscricoes.some(\r\n     i =>\r\n       i.atividadeId === atividadeId &&\r\n       i.participanteId === participanteId &&\r\n       ativa.includes(i.status)\r\n   )\r\n   if (jaInscrito) {\r\n     return { erro: 'JA_INSCRITO' }\r\n   }\r\n   const conflita = inscricoes.some(inscricao => {\r\n     if (inscricao.participanteId !== participanteId) {\r\n       return false\r\n     }\r\n     if (!['confirmada', 'convocada'].includes(inscricao.status)) {\r\n       return false\r\n     }\r\n     const outra = buscarAtividade(inscricao.atividadeId)\r\n     return (\r\n       outra &&\r\n       outra.encontros.some(encontroOutro =>\r\n         atividade.encontros.some(\r\n           encontroNovo =>\r\n             Date.parse(encontroNovo.inicio) < Date.parse(encontroOutro.fim) &&\r\n             Date.parse(encontroOutro.inicio) < Date.parse(encontroNovo.fim)\r\n         )\r\n       )\r\n     )\r\n   })\r\n   if (conflita) {\r\n     return { erro: 'CONFLITO_DE_HORARIO' }\r\n   }\r\n   const ocupadas = inscricoes.filter(\r\n     i => i.atividadeId === atividadeId && ['confirmada', 'convocada'].includes(i.status)\r\n   ).length\r\n   const temVaga = ocupadas < atividade.vagas\r\n   if (temVaga && atividade.tipo === 'minicurso') {\r\n     const meusMinicursosOcupandoVaga = inscricoes.filter(\r\n       i =>\r\n         i.participanteId === participanteId &&\r\n         ['confirmada', 'convocada'].includes(i.status) &&\r\n         buscarAtividade(i.atividadeId)?.tipo === 'minicurso'\r\n     ).length\r\n     if (meusMinicursosOcupandoVaga >= 3) {\r\n       return { erro: 'LIMITE_DE_MINICURSOS' }\r\n     }\r\n   }\r\n   const naEspera = emEsperaDa(atividadeId).length\r\n   const inscricao = {\r\n     id: `ins_${hex8()}`,\r\n     atividadeId,\r\n     participanteId,\r\n     status: temVaga ? 'confirmada' : 'em_espera',\r\n     posicaoNaEspera: temVaga ? null : naEspera + 1,\r\n     convocadaAte: null,\r\n     criadaEm: agora()\r\n   }\r\n   inscricoes.push(inscricao)\r\n   return formatar(inscricao)\r\n }\r\n \r\n export function listarInscricoes(xUsuario, papel, filtros = {}) {\r\n   const todasAsAtividades = new Set(inscricoes.map(i => i.atividadeId))\r\n   for (const atividadeId of todasAsAtividades) {\r\n     processarEsperaDa(atividadeId)\r\n   }\r\n   let lista = inscricoes\r\n   if (papel !== 'organizacao') {\r\n     lista = lista.filter(i => i.participanteId === xUsuario)\r\n   }\r\n   if (filtros.atividadeId) {\r\n     lista = lista.filter(i => i.atividadeId === filtros.atividadeId)\r\n   }\r\n   return lista.map(formatar)\r\n }\r\n \r\n export function buscarInscricao(id) {\r\n   const inscricao = inscricoes.find(i => i.id === id)\r\n   if (!inscricao) {\r\n     return null\r\n   }\r\n   processarEsperaDa(inscricao.atividadeId)\r\n   return formatar(inscricao)\r\n }\r\n \r\n export function cancelarInscricao(id, xUsuario) {\r\n   const inscricao = inscricoes.find(i => i.id === id)\r\n   if (!inscricao || inscricao.participanteId !== xUsuario) {\r\n     return { erro: 'NAO_ENCONTRADO' }\r\n   }\r\n   const atividade = buscarAtividade(inscricao.atividadeId)\r\n   if (atividade && Date.parse(agora()) >= Date.parse(atividade.encontros[0].inicio)) {\r\n     return { erro: 'ATIVIDADE_JA_INICIADA' }\r\n   }\r\n   if (inscricao.status === 'cancelada' || inscricao.status === 'expirada') {\r\n     return { erro: 'INSCRICAO_INATIVA' }\r\n   }\r\n   if (inscricao.status === 'em_espera') {\r\n     inscricao.status = 'cancelada'\r\n     inscricao.posicaoNaEspera = null\r\n     reindexarEsperaDa(inscricao.atividadeId)\r\n     return formatar(inscricao)\r\n   }\r\n   if (inscricao.status === 'confirmada' || inscricao.status === 'convocada') {\r\n     inscricao.status = 'cancelada'\r\n     inscricao.posicaoNaEspera = null\r\n     inscricao.convocadaAte = null\r\n     processarEsperaDa(inscricao.atividadeId)\r\n     return formatar(inscricao)\r\n   }\r\n   return null\r\n }\r\n \r\n export function confirmarInscricao(id, xUsuario) {\r\n   const inscricao = inscricoes.find(i => i.id === id)\r\n   if (!inscricao || inscricao.participanteId !== xUsuario) {\r\n     return { erro: 'NAO_ENCONTRADO' }\r\n   }\r\n   if (inscricao.status !== 'convocada') {\r\n     return { erro: 'SEM_CONVOCACAO' }\r\n   }\r\n   if (Date.parse(agora()) > Date.parse(inscricao.convocadaAte)) {\r\n     return { erro: 'CONVOCACAO_EXPIRADA' }\r\n   }\r\n   const atividade = buscarAtividade(inscricao.atividadeId)\r\n   const conflita = inscricoes.some(ins => {\r\n     if (ins.id === id || ins.participanteId !== xUsuario) {\r\n       return false\r\n     }\r\n     if (!['confirmada', 'convocada'].includes(ins.status)) {\r\n       return false\r\n     }\r\n     const outra = buscarAtividade(ins.atividadeId)\r\n     return (\r\n       outra &&\r\n       outra.encontros.some(encontroOutro =>\r\n         atividade.encontros.some(\r\n           encontroNovo =>\r\n             Date.parse(encontroNovo.inicio) < Date.parse(encontroOutro.fim) &&\r\n             Date.parse(encontroOutro.inicio) < Date.parse(encontroNovo.fim)\r\n         )\r\n       )\r\n     )\r\n   })\r\n   if (conflita) {\r\n     return { erro: 'CONFLITO_DE_HORARIO' }\r\n   }\r\n   if (atividade.tipo === 'minicurso') {\r\n     const meusMinicursosOcupandoVaga = inscricoes.filter(\r\n       i =>\r\n         i.id !== id &&\r\n         i.participanteId === xUsuario &&\r\n         ['confirmada', 'convocada'].includes(i.status) &&\r\n         buscarAtividade(i.atividadeId)?.tipo === 'minicurso'\r\n     ).length\r\n     if (meusMinicursosOcupandoVaga >= 3) {\r\n       return { erro: 'LIMITE_DE_MINICURSOS' }\r\n     }\r\n   }\r\n   inscricao.status = 'confirmada'\r\n   inscricao.convocadaAte = null\r\n   inscricao.posicaoNaEspera = null\r\n   return formatar(inscricao)\r\n }\r\n \r\n export function resetInscricoes() {\r\n   inscricoes = []\r\n }\r\n \r\n export function contadoresDe(atividadeId) {\r\n   const daAtividade = inscricoes.filter(i => i.atividadeId === atividadeId)\r\n   return {\r\n     ocupadas: daAtividade.filter(i =>\r\n       ['confirmada', 'convocada'].includes(i.status)\r\n     ).length,\r\n     emEspera: daAtividade.filter(i => i.status === 'em_espera').length\r\n   }\r\n }\r\n \r\n export function cancelarInscricoesDaAtividade(atividadeId) {\r\n   for (const inscricao of inscricoes) {\r\n     if (\r\n       inscricao.atividadeId === atividadeId &&\r\n       ['confirmada', 'em_espera', 'convocada'].includes(inscricao.status)\r\n     ) {\r\n       inscricao.status = 'cancelada'\r\n       inscricao.posicaoNaEspera = null\r\n       inscricao.convocadaAte = null\r\n     }\r\n   }\r\n }\r\n \r\n function emEsperaDa(atividadeId) {\r\n   return inscricoes\r\n     .map((inscricao, indice) => ({ inscricao, indice }))\r\n     .filter(\r\n       x =>\r\n         x.inscricao.atividadeId === atividadeId &&\r\n         x.inscricao.status === 'em_espera'\r\n     )\r\n     .sort(\r\n       (a, b) =>\r\n         a.inscricao.posicaoNaEspera - b.inscricao.posicaoNaEspera || a.indice - b.indice\r\n     )\r\n     .map(x => x.inscricao)\r\n }\r\n \r\n function reindexarEsperaDa(atividadeId) {\r\n   emEsperaDa(atividadeId).forEach((inscricao, i) => {\r\n     inscricao.posicaoNaEspera = i + 1\r\n   })\r\n }\r\n \r\n const FECHAM_ANTES = 30 * 60 * 1000\r\n const PRAZO_CONVOCACAO = 2 * 60 * 60 * 1000\r\n \r\n function emHorarioDeBrasilia(instanteMs) {\r\n   const d = new Date(instanteMs - 3 * 3600 * 1000)\r\n   const pad = n => String(n).padStart(2, '0')\r\n   return (\r\n     `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T` +\r\n     `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}-03:00`\r\n   )\r\n }\r\n \r\n function convocadaAtePara(atividade, instanteBase) {\r\n   const fechamento = Date.parse(atividade.encontros[0].inicio) - FECHAM_ANTES\r\n   return emHorarioDeBrasilia(Math.min(instanteBase + PRAZO_CONVOCACAO, fechamento))\r\n }\r\n \r\n export function processarEsperaDa(atividadeId) {\r\n   const atividade = buscarAtividade(atividadeId)\r\n-  if (!atividade || atividade.cancelada) {\r\n+  if (!atividade || atividade.situacao === 'cancelada') {\r\n     return\r\n   }\r\n   let baseDaProxima = null\r\n   let mudou = true\r\n   while (mudou) {\r\n     mudou = false\r\n     const daAtividade = inscricoes.filter(i => i.atividadeId === atividadeId)\r\n     const vencida = daAtividade.find(\r\n       i =>\r\n         i.status === 'convocada' &&\r\n         Date.parse(i.convocadaAte) < Date.parse(agora())\r\n     )\r\n     if (vencida) {\r\n       baseDaProxima = Date.parse(vencida.convocadaAte)\r\n       vencida.status = 'expirada'\r\n       vencida.convocadaAte = null\r\n       vencida.posicaoNaEspera = null\r\n       mudou = true\r\n       continue\r\n     }\r\n     const ocupadas = daAtividade.filter(\r\n       i => ['confirmada', 'convocada'].includes(i.status)\r\n     ).length\r\n     if (ocupadas < atividade.vagas) {\r\n       const proximo = daAtividade\r\n         .filter(i => i.status === 'em_espera')\r\n         .sort((a, b) => a.posicaoNaEspera - b.posicaoNaEspera)[0]\r\n       if (proximo) {\r\n         const base = baseDaProxima ?? Date.parse(agora())\r\n         proximo.status = 'convocada'\r\n         proximo.posicaoNaEspera = null\r\n         proximo.convocadaAte = convocadaAtePara(atividade, base)\r\n         baseDaProxima = null\r\n         mudou = true\r\n         continue\r\n       }\r\n     }\r\n   }\r\n   reindexarEsperaDa(atividadeId)\r\n }\r\n \r\n function formatar(inscricao) {\r\n   return {\r\n     id: inscricao.id,\r\n     atividadeId: inscricao.atividadeId,\r\n     participanteId: inscricao.participanteId,\r\n     status: inscricao.status,\r\n     posicaoNaEspera: inscricao.posicaoNaEspera,\r\n     convocadaAte: inscricao.convocadaAte,\r\n     criadaEm: inscricao.criadaEm\r\n   }\r\n }\n\\ No newline at end of file\n",
+       "additions": 2,
+       "deletions": 2,
+       "status": "modified"
+      },
+      {
+       "file": "api/test/atividades-contrato.test.js",
+       "patch": "Index: api/test/atividades-contrato.test.js\n===================================================================\n--- api/test/atividades-contrato.test.js\t\n+++ api/test/atividades-contrato.test.js\t\n@@ -0,0 +1,108 @@\n+import { describe, it, before, after } from 'node:test'\n+import assert from 'node:assert/strict'\n+import { createServer } from 'node:http'\n+import { createApp } from '../src/index.js'\n+\n+function listen(app) {\n+  return new Promise((resolve, reject) => {\n+    const server = createServer(app)\n+    server.listen(0, () => {\n+      const { port } = server.address()\n+      resolve({ server, port })\n+    })\n+    server.on('error', reject)\n+  })\n+}\n+\n+function close(server) {\n+  return new Promise(resolve => server.close(resolve))\n+}\n+\n+async function reset(port) {\n+  await fetch(`http://localhost:${port}/_teste/reset`, { method: 'POST' })\n+}\n+\n+const CAMPOS_DA_ATIVIDADE = [\n+  'id',\n+  'titulo',\n+  'tipo',\n+  'salaId',\n+  'vagas',\n+  'encontros',\n+  'cargaHorariaMinutos',\n+  'situacao',\n+  'ocupadas',\n+  'vagasRestantes',\n+  'emEspera'\n+]\n+\n+function corpoDaAtividade() {\n+  return {\n+    titulo: 'Flutter do zero',\n+    tipo: 'minicurso',\n+    salaId: 'lab-3',\n+    vagas: 20,\n+    encontros: [\n+      { inicio: '2026-10-19T19:00:00-03:00', fim: '2026-10-19T22:00:00-03:00' },\n+      { inicio: '2026-10-20T19:00:00-03:00', fim: '2026-10-20T22:00:00-03:00' }\n+    ]\n+  }\n+}\n+\n+async function criarAtividade(port) {\n+  const res = await fetch(`http://localhost:${port}/atividades`, {\n+    method: 'POST',\n+    headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },\n+    body: JSON.stringify(corpoDaAtividade())\n+  })\n+  assert.equal(res.status, 201)\n+  return res.json()\n+}\n+\n+function conferirFormatoDoContrato(body) {\n+  assert.equal('cancelada' in body, false)\n+  assert.deepEqual(Object.keys(body).sort(), [...CAMPOS_DA_ATIVIDADE].sort())\n+}\n+\n+describe('Contrato — Atividade sem o campo interno cancelada', () => {\n+  let server, port\n+\n+  before(() => {\n+    process.env.MODO_TESTE = '1'\n+  })\n+\n+  before(async () => {\n+    ;({ server, port } = await listen(createApp()))\n+  })\n+\n+  after(() => close(server))\n+\n+  it('POST /atividades responde Atividade com exatamente os campos do contrato', async () => {\n+    await reset(port)\n+    conferirFormatoDoContrato(await criarAtividade(port))\n+  })\n+\n+  it('GET /atividades/:id responde Atividade com exatamente os campos do contrato', async () => {\n+    await reset(port)\n+    const criada = await criarAtividade(port)\n+    const res = await fetch(\n+      `http://localhost:${port}/atividades/${criada.id}`,\n+      { headers: { 'X-Usuario': 'org-ana' } }\n+    )\n+    assert.equal(res.status, 200)\n+    conferirFormatoDoContrato(await res.json())\n+  })\n+\n+  it('POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato', async () => {\n+    await reset(port)\n+    const criada = await criarAtividade(port)\n+    const res = await fetch(\n+      `http://localhost:${port}/atividades/${criada.id}/cancelamento`,\n+      { method: 'POST', headers: { 'X-Usuario': 'org-ana' } }\n+    )\n+    assert.equal(res.status, 200)\n+    const body = await res.json()\n+    conferirFormatoDoContrato(body)\n+    assert.equal(body.situacao, 'cancelada')\n+  })\n+})\n\\ No newline at end of file\n",
+       "additions": 108,
+       "deletions": 0,
+       "status": "added"
+      }
+     ]
+    },
+    "id": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "type": "text",
+     "text": "Dentro da pasta api/ Use a skill tdd. Resolva o achado de ../auditorias/revisor-contrato-2026-09-17.md: as respostas de Atividade incluem o campo `cancelada`, que não existe no contrato-api.md (seção 5, objeto Atividade). Não altere spec nem testes existentes.\n\nPrimeiro o teste, em test/atividades-contrato.test.js: POST /atividades com org-ana, depois GET /atividades/:id e POST /atividades/:id/cancelamento — em todas as respostas, assert.equal('cancelada' in body, false) e o objeto tem exatamente os campos do contrato (id, titulo, tipo, salaId, vagas, encontros, cargaHorariaMinutos, situacao, ocupadas, vagasRestantes, emEspera). Mostre o teste falhando.\n\nDepois o código: em src/atividades.js, `formatar` não pode espalhar o campo interno `cancelada` na resposta (o estado interno continua existindo no array). Atenção: src/inscricoes.js:18 e :258 leem `atividade.cancelada` do objeto que vem de buscarAtividade — troque essas duas leituras por `atividade.situacao === 'cancelada'` antes de tirar o campo, senão a inscrição quebra. Rode npm test e relate o número real (todos os 178 existentes precisam continuar verdes).\n\nFaça o commit com a mensagem: M1: resposta de Atividade sem o campo interno cancelada (achado do revisor-de-contrato) ",
+     "id": "prt_0b1640483001ZHNRAFAtr0SUQ4",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1640482001huGYHc9Rm0jVBW"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 12471,
+     "input": 10600,
+     "output": 79,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 1792
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682517131,
+     "completed": 1789682519628
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b164048b001yz3yVTm5Zam1wj",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-start",
+     "id": "prt_0b1640b69001rf5Cd9yOZKp7wm",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164048b001yz3yVTm5Zam1wj"
+    },
+    {
+     "type": "reasoning",
+     "text": "Let me start by loading the tdd skill as requested, and also looking at the audit file and the relevant source files.\n\nLet me first load the tdd skill.",
+     "time": {
+      "start": 1789682518890,
+      "end": 1789682518927
+     },
+     "id": "prt_0b1640b6a001yueoByMc7CvIE2",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164048b001yz3yVTm5Zam1wj"
+    },
+    {
+     "type": "text",
+     "text": "\n\n",
+     "time": {
+      "start": 1789682518929,
+      "end": 1789682519061
+     },
+     "id": "prt_0b1640b91001zBd2qWW6V49Cg1",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164048b001yz3yVTm5Zam1wj"
+    },
+    {
+     "type": "tool",
+     "tool": "skill",
+     "callID": "call_4da4291f728747feae48f7ba",
+     "state": {
+      "status": "completed",
+      "input": {
+       "name": "tdd"
+      },
+      "output": "<skill_content name=\"tdd\">\n# Skill: tdd\n\n# Teste primeiro, uma fatia por vez\r\n\r\nO ciclo é: **um teste que falha → o código mínimo que faz ele passar → a próxima fatia.**\r\nNada de escrever a suíte inteira e depois o código inteiro.\r\n\r\nVocê precisa de uma spec com regras numeradas. Sem ela, pare: você vai acabar testando o\r\nque você mesmo inventou. Sem contrato, verde não significa nada.\r\n\r\n## Onde o teste mora\r\n\r\nTeste verifica **comportamento pela interface pública**, nunca implementação. Aqui a\r\ninterface é HTTP: a API sobe com Express e o teste fala por `fetch`. Não importe\r\nserviço nem repositório no teste — se importar, o teste quebra quando você refatorar\r\nsem que o comportamento tenha mudado.\r\n\r\nPadrão do projeto: `node --test`, `node:assert/strict`, um arquivo de teste por\r\ncenário em `api/test/`. Sem framework, sem dependência, sem mock.\r\n\r\n## O ciclo, por fatia\r\n\r\nPara cada fatia da spec, nesta ordem:\r\n\r\n1. Escreva **um** teste que prova **um** critério de aceite. O nome do teste é a regra\r\n   em português: `it('recusa inscrição quando não há vagas')`.\r\n2. Rode. **Ele tem que falhar.** Teste que passa antes do código existir não está\r\n   testando nada — descubra por quê antes de seguir.\r\n3. Escreva o mínimo de código que faz ele passar. Nada de já implementar a regra\r\n   seguinte \"que eu vou precisar mesmo\".\r\n4. Rode a suíte inteira. Verde? Próxima fatia.\r\n\r\nSó passe para a fatia seguinte com a suíte inteira verde.\r\n\r\n## A regra que não se quebra\r\n\r\n**Quando o teste falha, o suspeito é o código.**\r\n\r\nSe você mudar um teste para ele passar, você trocou o contrato pela sua implementação e\r\no verde virou enfeite. Só se altera um teste quando a **spec** mudou — e aí você diz, em\r\nvoz alta, qual regra da spec mudou e por quê.\r\n\r\nVale para o valor esperado, para o status HTTP e para o cenário. Trocar\r\n`assert.equal(vagasRestantes, 10)` por `assert.equal(vagasRestantes, 8)` porque o código\r\ndeu 8 é a forma mais comum de mentir sozinho.\r\n\r\n## Três testes que não valem nada\r\n\r\n- **Acoplado à implementação** — chama serviço ou repositório direto, ou confere o dado\r\n  espiando o banco em vez de pedir pela API. Quebra em refatoração, não em regressão.\r\n- **Tautológico** — o esperado é calculado do mesmo jeito que o código calcula\r\n  (`assert.equal(ocupadas, inscritos + 1)`). Passa por construção, nunca discorda do código.\r\n  O valor esperado vem da spec, escrito na mão: `assert.equal(ocupadas, 13)`.\r\n- **Frouxo** — confere só o status e ignora o corpo. `201` com o prazo errado passa.\r\n\r\n## Fechamento\r\n\r\nTerminada a última fatia, rode a suíte inteira uma vez e relate o número real que\r\napareceu na saída. Não estime, não arredonde, não repita um número de outra rodada.\n\nBase directory for this skill: C:\\semana-academica\\.opencode\\skills\\tdd\nRelative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.\nNote: file list is sampled.\n\n<skill_files>\n\n</skill_files>\n</skill_content>",
+      "metadata": {
+       "name": "tdd",
+       "dir": "C:\\semana-academica\\.opencode\\skills\\tdd",
+       "truncated": false
+      },
+      "title": "Loaded skill: tdd",
+      "time": {
+       "start": 1789682518984,
+       "end": 1789682519022
+      }
+     },
+     "id": "prt_0b1640bc1001ub09666TenngD2",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164048b001yz3yVTm5Zam1wj"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-finish",
+     "tokens": {
+      "total": 12471,
+      "input": 10600,
+      "output": 79,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 1792
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1640d30001ypFCbjpP4bVsJJ",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164048b001yz3yVTm5Zam1wj"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 13641,
+     "input": 1129,
+     "output": 224,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 12288
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682519631,
+     "completed": 1789682522103
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b1640e4f001AymuJZeIECmzAT",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-start",
+     "id": "prt_0b164127e001F7TaM51yfrclh0",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1640e4f001AymuJZeIECmzAT"
+    },
+    {
+     "type": "reasoning",
+     "text": "Let me look at the relevant files. Let me read the audit report, the contract, and the source files.",
+     "time": {
+      "start": 1789682520703,
+      "end": 1789682520791
+     },
+     "id": "prt_0b164127f001sLK2zGLOCZHa0Z",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1640e4f001AymuJZeIECmzAT"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_1613132abb664ee9a1069c9a",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\auditorias\\revisor-contrato-2026-09-17.md"
+      },
+      "output": "[889 caracteres omitidos]",
+      "title": "auditorias\\revisor-contrato-2026-09-17.md",
+      "time": {
+       "start": 1789682520888,
+       "end": 1789682520906
+      }
+     },
+     "id": "prt_0b16412d9001eEiN1226avC6d3",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1640e4f001AymuJZeIECmzAT"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_e88894136fe14cdc91d4424b",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\atividades.js"
+      },
+      "output": "[11725 caracteres omitidos]",
+      "title": "api\\src\\atividades.js",
+      "time": {
+       "start": 1789682520963,
+       "end": 1789682520972
+      }
+     },
+     "id": "prt_0b164133a001ASQMvgE2OGpZN5",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1640e4f001AymuJZeIECmzAT"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_2903e7b6aa9141b5a051e6d3",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\inscricoes.js"
+      },
+      "output": "[11054 caracteres omitidos]",
+      "title": "api\\src\\inscricoes.js",
+      "time": {
+       "start": 1789682521057,
+       "end": 1789682521073
+      }
+     },
+     "id": "prt_0b164138f001hHT9PH40OR1a8j",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1640e4f001AymuJZeIECmzAT"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_bcc51d4134b94044ad6deee7",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\contrato-api.md"
+      },
+      "output": "[13866 caracteres omitidos]",
+      "title": "contrato-api.md",
+      "time": {
+       "start": 1789682521133,
+       "end": 1789682521150
+      }
+     },
+     "id": "prt_0b16413e3001EKsUUyRu0CzZ8y",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1640e4f001AymuJZeIECmzAT"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-finish",
+     "tokens": {
+      "total": 13641,
+      "input": 1129,
+      "output": 224,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 12288
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1641664001ORRe0WebSONFu8",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1640e4f001AymuJZeIECmzAT"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 27082,
+     "input": 13382,
+     "output": 132,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 13568
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682522107,
+     "completed": 1789682524405
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b16417fb001LS5j2QLbuSwj5N",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-start",
+     "id": "prt_0b1641cc4001glOoGaNR0orNx1",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16417fb001LS5j2QLbuSwj5N"
+    },
+    {
+     "type": "reasoning",
+     "text": "Let me look at the existing tests to understand the testing pattern. Let me look at how tests set up the app and existing atividades tests.",
+     "time": {
+      "start": 1789682523343,
+      "end": 1789682523441
+     },
+     "id": "prt_0b1641ccf0017N9qwvdwdXFsxz",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16417fb001LS5j2QLbuSwj5N"
+    },
+    {
+     "type": "text",
+     "text": "Let me look at the existing test structure to follow the pattern.",
+     "time": {
+      "start": 1789682523443,
+      "end": 1789682523795
+     },
+     "id": "prt_0b1641d33001T4EDCePnFNKFFN",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16417fb001LS5j2QLbuSwj5N"
+    },
+    {
+     "type": "tool",
+     "tool": "glob",
+     "callID": "call_8ca120d546814e15a71e5008",
+     "state": {
+      "status": "completed",
+      "input": {
+       "pattern": "api/test/*.test.js"
+      },
+      "output": "[1051 caracteres omitidos]",
+      "title": "",
+      "time": {
+       "start": 1789682523625,
+       "end": 1789682523664
+      }
+     },
+     "id": "prt_0b1641d90001HLOpKN45N7YPxo",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16417fb001LS5j2QLbuSwj5N"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_9771f413ce3747f5b183dfa6",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\index.js"
+      },
+      "output": "[13026 caracteres omitidos]",
+      "title": "api\\src\\index.js",
+      "time": {
+       "start": 1789682523695,
+       "end": 1789682523701
+      }
+     },
+     "id": "prt_0b1641deb001IyaD5COZDknmBd",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16417fb001LS5j2QLbuSwj5N"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-finish",
+     "tokens": {
+      "total": 27082,
+      "input": 13382,
+      "output": 132,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 13568
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1641fce001q3CIfh0e0t3Sno",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16417fb001LS5j2QLbuSwj5N"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 31691,
+     "input": 4750,
+     "output": 61,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 26880
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682524411,
+     "completed": 1789682526378
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b16420fb001B4RgpG2YQ7H3mk",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-start",
+     "id": "prt_0b164259e001oVK30cfTbtEAX2",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16420fb001B4RgpG2YQ7H3mk"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_7c59875222804427a88f76ee",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\atividades.test.js"
+      },
+      "output": "[13090 caracteres omitidos]",
+      "title": "api\\test\\atividades.test.js",
+      "time": {
+       "start": 1789682525729,
+       "end": 1789682525736
+      }
+     },
+     "id": "prt_0b16425ef0017A92WfE2dxqnG4",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16420fb001B4RgpG2YQ7H3mk"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-finish",
+     "tokens": {
+      "total": 31691,
+      "input": 4750,
+      "output": 61,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 26880
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b164275f001BOHFucPKt0GKZl",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16420fb001B4RgpG2YQ7H3mk"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 37629,
+     "input": 4549,
+     "output": 1592,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 31488
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682526381,
+     "completed": 1789682532698
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b16428ad001cqZbT8U3k1rCuZ",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "106b02675588036167a7d101535505137516df96",
+     "type": "step-start",
+     "id": "prt_0b1642d59001Nmjj9ZvlOet5XF",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16428ad001cqZbT8U3k1rCuZ"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now I understand the pattern. Let me check the existing test count (178 tests). Let me run the tests first to confirm the baseline. Actually, the task says: first write the test in `test/atividades-contrato.test.js`, show it failing. Then fix the code. Then run npm test, report the real number (178 existing need to stay green).\n\nLet me write the test file. It needs POST /atividades with org-ana, then GET /atividades/:id and POST /atividades/:id/cancelamento — in all responses, assert `'cancelada' in body` is false and the object has exactly the contract fields (id, titulo, tipo, salaId, vagas, encontros, cargaHorariaMinutos, situacao, ocupadas, vagasRestantes, emEspera).\n\nFor the exact fields check, I should use `Object.keys(body)` and compare with the expected list. The encontros also have their own objects — the contract doesn't strictly define encontro fields in the response beyond `{ \"id\": \"enc_5e6f7a8b\", \"inicio\": \"…\", \"fim\": \"…\" }`. Let me keep it focused on the top-level object fields.\n\nLet me write the test. Following the pattern from atividades.test.js.\n\nThe cancelamento route: POST /atividades/:id/cancelamento requires the activity to be 'prevista' (not started). If I create the activity with encontros in the future (2026-10-19 onward), and clock is at 2026-10-13 reset time, it's prevista. Cancelation should work.\n\nNow, for the test to show failing: currently, formatar spreads `...atividade` which includes `cancelada`. So `'cancelada' in body` will be true, and the exact fields check will fail. Good.\n\nLet me write the test file.\n\nNote the contract list: id, titulo, tipo, salaId, vagas, encontros, cargaHorariaMinutos, situacao, ocupadas, vagasRestantes, emEspera. That's 11 fields.\n\nLet me write the test.\n\nI'll write it with a single describe. Three its? Or one it covering all three sequential checks. The user says: \"POST /atividades com org-ana, depois GET /atividades/:id e POST /atividades/:id/cancelamento — em todas as respostas, assert.equal('cancelada' in body, false) e o objeto tem exatamente os campos do contrato\". \n\nI could write one `it` per response. Each `it` starts with reset (per pattern, \"Todo teste começa com POST /_teste/reset\"). Let me make three `it`s each creating via POST then asserting.\n\nLet me create a helper to post an activity. I'll follow the existing style without over-engineering.\n\nLet me write it.",
+     "time": {
+      "start": 1789682527579,
+      "end": 1789682529680
+     },
+     "id": "prt_0b1642d5b0014ZYV4G25UplWqy",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16428ad001cqZbT8U3k1rCuZ"
+    },
+    {
+     "type": "tool",
+     "tool": "write",
+     "callID": "call_94014c207f4c4e959927d56e",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\atividades-contrato.test.js",
+       "content": "import { describe, it, before, after } from 'node:test'\nimport assert from 'node:assert/strict'\nimport { createServer } from 'node:http'\nimport { createApp } from '../src/index.js'\n\nfunction listen(app) {\n  return new Promise((resolve, reject) => {\n    const server = createServer(app)\n    server.listen(0, () => {\n      const { port } = server.address()\n      resolve({ server, port })\n    })\n    server.on('error', reject)\n  })\n}\n\nfunction close(server) {\n  return new Promise(resolve => server.close(resolve))\n}\n\nasync function reset(port) {\n  await fetch(`http://localhost:${port}/_teste/reset`, { method: 'POST' })\n}\n\nconst CAMPOS_DA_ATIVIDADE = [\n  'id',\n  'titulo',\n  'tipo',\n  'salaId',\n  'vagas',\n  'encontros',\n  'cargaHorariaMinutos',\n  'situacao',\n  'ocupadas',\n  'vagasRestantes',\n  'emEspera'\n]\n\nfunction corpoDaAtividade() {\n  return {\n    titulo: 'Flutter do zero',\n    tipo: 'minicurso',\n    salaId: 'lab-3',\n    vagas: 20,\n    encontros: [\n      { inicio: '2026-10-19T19:00:00-03:00', fim: '2026-10-19T22:00:00-03:00' },\n      { inicio: '2026-10-20T19:00:00-03:00', fim: '2026-10-20T22:00:00-03:00' }\n    ]\n  }\n}\n\nasync function criarAtividade(port) {\n  const res = await fetch(`http://localhost:${port}/atividades`, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },\n    body: JSON.stringify(corpoDaAtividade())\n  })\n  assert.equal(res.status, 201)\n  return res.json()\n}\n\nfunction conferirFormatoDoContrato(body) {\n  assert.equal('cancelada' in body, false)\n  assert.deepEqual(Object.keys(body).sort(), [...CAMPOS_DA_ATIVIDADE].sort())\n}\n\ndescribe('Contrato — Atividade sem o campo interno cancelada', () => {\n  let server, port\n\n  before(() => {\n    process.env.MODO_TESTE = '1'\n  })\n\n  before(async () => {\n    ;({ server, port } = await listen(createApp()))\n  })\n\n  after(() => close(server))\n\n  it('POST /atividades responde Atividade com exatamente os campos do contrato', async () => {\n    await reset(port)\n    conferirFormatoDoContrato(await criarAtividade(port))\n  })\n\n  it('GET /atividades/:id responde Atividade com exatamente os campos do contrato', async () => {\n    await reset(port)\n    const criada = await criarAtividade(port)\n    const res = await fetch(\n      `http://localhost:${port}/atividades/${criada.id}`,\n      { headers: { 'X-Usuario': 'org-ana' } }\n    )\n    assert.equal(res.status, 200)\n    conferirFormatoDoContrato(await res.json())\n  })\n\n  it('POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato', async () => {\n    await reset(port)\n    const criada = await criarAtividade(port)\n    const res = await fetch(\n      `http://localhost:${port}/atividades/${criada.id}/cancelamento`,\n      { method: 'POST', headers: { 'X-Usuario': 'org-ana' } }\n    )\n    assert.equal(res.status, 200)\n    const body = await res.json()\n    conferirFormatoDoContrato(body)\n    assert.equal(body.situacao, 'cancelada')\n  })\n})"
+      },
+      "output": "Wrote file successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "filepath": "C:\\semana-academica\\api\\test\\atividades-contrato.test.js",
+       "exists": false,
+       "truncated": false
+      },
+      "title": "api\\test\\atividades-contrato.test.js",
+      "time": {
+       "start": 1789682531923,
+       "end": 1789682531951
+      }
+     },
+     "id": "prt_0b1643594001raLh2t01mAJMAh",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16428ad001cqZbT8U3k1rCuZ"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "86612ee6053b2c793575bc053254ab446f8a6721",
+     "type": "step-finish",
+     "tokens": {
+      "total": 37629,
+      "input": 4549,
+      "output": 1592,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 31488
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b16440080010uzrA1MmIiGN0B",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16428ad001cqZbT8U3k1rCuZ"
+    },
+    {
+     "type": "patch",
+     "hash": "106b02675588036167a7d101535505137516df96",
+     "files": [
+      "C:/semana-academica/api/test/atividades-contrato.test.js"
+     ],
+     "id": "prt_0b164414f001mcFaODz0YC7jXi",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16428ad001cqZbT8U3k1rCuZ"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 37725,
+     "input": 268,
+     "output": 81,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 37376
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682532702,
+     "completed": 1789682537335
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b164415e001mZXrDcC7mDLTh4",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "86612ee6053b2c793575bc053254ab446f8a6721",
+     "type": "step-start",
+     "id": "prt_0b16446f50010O3oHl9OGMaHO9",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164415e001mZXrDcC7mDLTh4"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_5887fcc8c7774fe38137a95e",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "node --test test/atividades-contrato.test.js",
+       "workdir": "C:\\semana-academica\\api"
+      },
+      "output": "▶ Contrato — Atividade sem o campo interno cancelada\n  ✖ POST /atividades responde Atividade com exatamente os campos do contrato (51.0474ms)\n  ✖ GET /atividades/:id responde Atividade com exatamente os campos do contrato (9.4302ms)\n  ✖ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (9.6964ms)\n✖ Contrato — Atividade sem o campo interno cancelada (78.0932ms)\nℹ tests 3\nℹ suites 1\nℹ pass 0\nℹ fail 3\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 314.9645\n\n✖ failing tests:\n\ntest at test\\atividades-contrato.test.js:80:3\n✖ POST /atividades responde Atividade com exatamente os campos do contrato (51.0474ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  true !== false\n  \n      at conferirFormatoDoContrato (file:///C:/semana-academica/api/test/atividades-contrato.test.js:63:10)\n      at TestContext.<anonymous> (file:///C:/semana-academica/api/test/atividades-contrato.test.js:82:5)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async Test.run (node:internal/test_runner/test:1208:7)\n      at async Promise.all (index 0)\n      at async Suite.run (node:internal/test_runner/test:1619:7)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: true,\n    expected: false,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at test\\atividades-contrato.test.js:85:3\n✖ GET /atividades/:id responde Atividade com exatamente os campos do contrato (9.4302ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  true !== false\n  \n      at conferirFormatoDoContrato (file:///C:/semana-academica/api/test/atividades-contrato.test.js:63:10)\n      at TestContext.<anonymous> (file:///C:/semana-academica/api/test/atividades-contrato.test.js:93:5)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async Test.run (node:internal/test_runner/test:1208:7)\n      at async Suite.processPendingSubtests (node:internal/test_runner/test:831:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: true,\n    expected: false,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at test\\atividades-contrato.test.js:96:3\n✖ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (9.6964ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  true !== false\n  \n      at conferirFormatoDoContrato (file:///C:/semana-academica/api/test/atividades-contrato.test.js:63:10)\n      at TestContext.<anonymous> (file:///C:/semana-academica/api/test/atividades-contrato.test.js:105:5)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async Test.run (node:internal/test_runner/test:1208:7)\n      at async Suite.processPendingSubtests (node:internal/test_runner/test:831:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: true,\n    expected: false,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n",
+      "metadata": {
+       "output": "▶ Contrato — Atividade sem o campo interno cancelada\n  ✖ POST /atividades responde Atividade com exatamente os campos do contrato (51.0474ms)\n  ✖ GET /atividades/:id responde Atividade com exatamente os campos do contrato (9.4302ms)\n  ✖ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (9.6964ms)\n✖ Contrato — Atividade sem o campo interno cancelada (78.0932ms)\nℹ tests 3\nℹ suites 1\nℹ pass 0\nℹ fail 3\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 314.9645\n\n✖ failing tests:\n\ntest at test\\atividades-contrato.test.js:80:3\n✖ POST /atividades responde Atividade com exatamente os campos do contrato (51.0474ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  true !== false\n  \n      at conferirFormatoDoContrato (file:///C:/semana-academica/api/test/atividades-contrato.test.js:63:10)\n      at TestContext.<anonymous> (file:///C:/semana-academica/api/test/atividades-contrato.test.js:82:5)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async Test.run (node:internal/test_runner/test:1208:7)\n      at async Promise.all (index 0)\n      at async Suite.run (node:internal/test_runner/test:1619:7)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: true,\n    expected: false,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at test\\atividades-contrato.test.js:85:3\n✖ GET /atividades/:id responde Atividade com exatamente os campos do contrato (9.4302ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  true !== false\n  \n      at conferirFormatoDoContrato (file:///C:/semana-academica/api/test/atividades-contrato.test.js:63:10)\n      at TestContext.<anonymous> (file:///C:/semana-academica/api/test/atividades-contrato.test.js:93:5)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async Test.run (node:internal/test_runner/test:1208:7)\n      at async Suite.processPendingSubtests (node:internal/test_runner/test:831:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: true,\n    expected: false,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at test\\atividades-contrato.test.js:96:3\n✖ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (9.6964ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  true !== false\n  \n      at conferirFormatoDoContrato (file:///C:/semana-academica/api/test/atividades-contrato.test.js:63:10)\n      at TestContext.<anonymous> (file:///C:/semana-academica/api/test/atividades-contrato.test.js:105:5)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async Test.run (node:internal/test_runner/test:1208:7)\n      at async Suite.processPendingSubtests (node:internal/test_runner/test:831:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: true,\n    expected: false,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n",
+       "exit": 1,
+       "truncated": false
+      },
+      "title": "node --test test/atividades-contrato.test.js",
+      "time": {
+       "start": 1789682536057,
+       "end": 1789682536740
+      }
+     },
+     "id": "prt_0b1644df0001vnrmN5M92wRE5T",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164415e001mZXrDcC7mDLTh4"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "86612ee6053b2c793575bc053254ab446f8a6721",
+     "type": "step-finish",
+     "tokens": {
+      "total": 37725,
+      "input": 268,
+      "output": 81,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 37376
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1645242001tQJkGrtVhfrmw2",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164415e001mZXrDcC7mDLTh4"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 39316,
+     "input": 1050,
+     "output": 634,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 37632
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682537340,
+     "completed": 1789682541526
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b164537c001gXBcgitlK2TYx3",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "86612ee6053b2c793575bc053254ab446f8a6721",
+     "type": "step-start",
+     "id": "prt_0b164593a001e7K4RkNY9pLpVj",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164537c001gXBcgitlK2TYx3"
+    },
+    {
+     "type": "reasoning",
+     "text": "The test fails as expected — the `cancelada` field leaks into the response. Now fix the code.\n\nFirst, fix inscricoes.js lines 18 and 258 to use `atividade.situacao === 'cancelada'` instead of `atividade.cancelada`. The user says to swap these before removing the field. Note: `buscarAtividade` returns `formatar(atividade)` which now includes `situacao`. So `atividade.situacao === 'cancelada'` will work.\n\nWait, but careful: `situacaoDa(atividade)` uses `atividade.cancelada` to determine 'cancelada'. That's the internal state, which remains in the array. That stays as-is. Good.\n\nNow the formatar function: instead of spreading `...atividade`, build the object explicitly with the contract fields. Let me rewrite formatar:\n\n```js\nfunction formatar(atividade) {\n  const { ocupadas, emEspera } = contadoresDe(atividade.id)\n  return {\n    id: atividade.id,\n    titulo: atividade.titulo,\n    tipo: atividade.tipo,\n    salaId: atividade.salaId,\n    vagas: atividade.vagas,\n    encontros: atividade.encontros,\n    cargaHorariaMinutos: atividade.cargaHorariaMinutos,\n    situacao: situacaoDa(atividade),\n    ocupadas,\n    vagasRestantes: atividade.vagas - ocupadas,\n    emEspera\n  }\n}\n```\n\nThis builds the object explicitly with exactly the contract fields. \n\nBut wait — in criarAtividade, the internal stored object has `ocupadas: 0, vagasRestantes: data.vagas, emEspera: 0, cancelada: false`. These are stored but formatar recomputes ocupadas, vagasRestantes, emEspera from contadoresDe. That's fine. The audit said these are overwritten in formatar; cancelada leaks. Good.\n\nNote the internal array keeps cancelada field for the conflict checks and situacaoDa and alterarAtividade/cancelarAtividade checks. That's fine — internal state continues existing.\n\nNow also in inscricoes.js:\n- Line 18: `if (atividade.cancelada) {` → `if (atividade.situacao === 'cancelada') {`\n- Line 258: `if (!atividade || atividade.cancelada) {` → `if (!atividade || atividade.situacao === 'cancelada') {`\n\nLet me check whether there are other reads of `.cancelada` elsewhere. Let me grep.",
+     "time": {
+      "start": 1789682538813,
+      "end": 1789682540168
+     },
+     "id": "prt_0b164593d001K4h9Q1NtZS62Ci",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164537c001gXBcgitlK2TYx3"
+    },
+    {
+     "type": "text",
+     "text": "Test fails as expected (3/3). Now fixing the code.",
+     "time": {
+      "start": 1789682540172,
+      "end": 1789682540689
+     },
+     "id": "prt_0b1645e8c001TAB4CBfcB4BKII",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164537c001gXBcgitlK2TYx3"
+    },
+    {
+     "type": "tool",
+     "tool": "grep",
+     "callID": "call_924a9fd77b064fde97ca2d70",
+     "state": {
+      "status": "completed",
+      "input": {
+       "pattern": "\\.cancelada",
+       "path": "C:\\semana-academica\\api\\src"
+      },
+      "output": "[410 caracteres omitidos]",
+      "title": "\\.cancelada",
+      "time": {
+       "start": 1789682540574,
+       "end": 1789682540621
+      }
+     },
+     "id": "prt_0b1645f0f0017dSS3bBJj2HPIp",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164537c001gXBcgitlK2TYx3"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "86612ee6053b2c793575bc053254ab446f8a6721",
+     "type": "step-finish",
+     "tokens": {
+      "total": 39316,
+      "input": 1050,
+      "output": 634,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 37632
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b164622f001TWSrT0d2XXzvHH",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164537c001gXBcgitlK2TYx3"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 40025,
+     "input": 315,
+     "output": 542,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 39168
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682541529,
+     "completed": 1789682547850
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b16463d9001nfTUSTQK6SkQee",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "86612ee6053b2c793575bc053254ab446f8a6721",
+     "type": "step-start",
+     "id": "prt_0b1646909001Ba6VqYtSJJAzvV",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16463d9001nfTUSTQK6SkQee"
+    },
+    {
+     "type": "tool",
+     "tool": "edit",
+     "callID": "call_09f59267d2d540f4919117d0",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\atividades.js",
+       "oldString": "function formatar(atividade) {\n  const { ocupadas, emEspera } = contadoresDe(atividade.id)\n  return {\n    ...atividade,\n    situacao: situacaoDa(atividade),\n    ocupadas,\n    vagasRestantes: atividade.vagas - ocupadas,\n    emEspera\n  }\n}",
+       "newString": "function formatar(atividade) {\n  const { ocupadas, emEspera } = contadoresDe(atividade.id)\n  return {\n    id: atividade.id,\n    titulo: atividade.titulo,\n    tipo: atividade.tipo,\n    salaId: atividade.salaId,\n    vagas: atividade.vagas,\n    encontros: atividade.encontros,\n    cargaHorariaMinutos: atividade.cargaHorariaMinutos,\n    situacao: situacaoDa(atividade),\n    ocupadas,\n    vagasRestantes: atividade.vagas - ocupadas,\n    emEspera\n  }\n}"
+      },
+      "output": "Edit applied successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "diff": "Index: C:\\semana-academica\\api\\src\\atividades.js\n===================================================================\n--- C:\\semana-academica\\api\\src\\atividades.js\n+++ C:\\semana-academica\\api\\src\\atividades.js\n@@ -92,9 +92,15 @@\n \n function formatar(atividade) {\n   const { ocupadas, emEspera } = contadoresDe(atividade.id)\n   return {\n-    ...atividade,\n+    id: atividade.id,\n+    titulo: atividade.titulo,\n+    tipo: atividade.tipo,\n+    salaId: atividade.salaId,\n+    vagas: atividade.vagas,\n+    encontros: atividade.encontros,\n+    cargaHorariaMinutos: atividade.cargaHorariaMinutos,\n     situacao: situacaoDa(atividade),\n     ocupadas,\n     vagasRestantes: atividade.vagas - ocupadas,\n     emEspera\n",
+       "filediff": {
+        "file": "C:\\semana-academica\\api\\src\\atividades.js",
+        "patch": "Index: C:\\semana-academica\\api\\src\\atividades.js\n===================================================================\n--- C:\\semana-academica\\api\\src\\atividades.js\n+++ C:\\semana-academica\\api\\src\\atividades.js\n@@ -92,9 +92,15 @@\n \n function formatar(atividade) {\n   const { ocupadas, emEspera } = contadoresDe(atividade.id)\n   return {\n-    ...atividade,\n+    id: atividade.id,\n+    titulo: atividade.titulo,\n+    tipo: atividade.tipo,\n+    salaId: atividade.salaId,\n+    vagas: atividade.vagas,\n+    encontros: atividade.encontros,\n+    cargaHorariaMinutos: atividade.cargaHorariaMinutos,\n     situacao: situacaoDa(atividade),\n     ocupadas,\n     vagasRestantes: atividade.vagas - ocupadas,\n     emEspera\n",
+        "additions": 7,
+        "deletions": 1
+       },
+       "truncated": false
+      },
+      "title": "api\\src\\atividades.js",
+      "time": {
+       "start": 1789682543635,
+       "end": 1789682543657
+      }
+     },
+     "id": "prt_0b164690b001A285dB8k8jIN6u",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16463d9001nfTUSTQK6SkQee"
+    },
+    {
+     "type": "tool",
+     "tool": "edit",
+     "callID": "call_654d08db51f944468b6fdae0",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\inscricoes.js",
+       "oldString": "if (atividade.cancelada) {\n    return { erro: 'ATIVIDADE_CANCELADA' }\n  }",
+       "newString": "if (atividade.situacao === 'cancelada') {\n    return { erro: 'ATIVIDADE_CANCELADA' }\n  }"
+      },
+      "output": "Edit applied successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "diff": "Index: C:\\semana-academica\\api\\src\\inscricoes.js\n===================================================================\n--- C:\\semana-academica\\api\\src\\inscricoes.js\n+++ C:\\semana-academica\\api\\src\\inscricoes.js\n@@ -14,9 +14,9 @@\n const atividade = buscarAtividade(atividadeId)\n if (!atividade) {\n   return { erro: 'NAO_ENCONTRADO' }\n }\n-if (atividade.cancelada) {\n+if (atividade.situacao === 'cancelada') {\n   return { erro: 'ATIVIDADE_CANCELADA' }\n }\n const FECHAM_ANTES = 30 * 60 * 1000\n const inicioPrimeiroEncontro = Date.parse(atividade.encontros[0].inicio)\n",
+       "filediff": {
+        "file": "C:\\semana-academica\\api\\src\\inscricoes.js",
+        "patch": "Index: C:\\semana-academica\\api\\src\\inscricoes.js\n===================================================================\n--- C:\\semana-academica\\api\\src\\inscricoes.js\n+++ C:\\semana-academica\\api\\src\\inscricoes.js\n@@ -14,9 +14,9 @@\n const atividade = buscarAtividade(atividadeId)\n if (!atividade) {\n   return { erro: 'NAO_ENCONTRADO' }\n }\n-if (atividade.cancelada) {\n+if (atividade.situacao === 'cancelada') {\n   return { erro: 'ATIVIDADE_CANCELADA' }\n }\n const FECHAM_ANTES = 30 * 60 * 1000\n const inicioPrimeiroEncontro = Date.parse(atividade.encontros[0].inicio)\n",
+        "additions": 1,
+        "deletions": 1
+       },
+       "truncated": false
+      },
+      "title": "api\\src\\inscricoes.js",
+      "time": {
+       "start": 1789682544068,
+       "end": 1789682544092
+      }
+     },
+     "id": "prt_0b1646c15001XpXslLH160a3A5",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16463d9001nfTUSTQK6SkQee"
+    },
+    {
+     "type": "tool",
+     "tool": "edit",
+     "callID": "call_989f67adfc7d4be699b1cdc1",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\src\\inscricoes.js",
+       "oldString": "if (!atividade || atividade.cancelada) {\n    return\n  }",
+       "newString": "if (!atividade || atividade.situacao === 'cancelada') {\n    return\n  }"
+      },
+      "output": "Edit applied successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "diff": "Index: C:\\semana-academica\\api\\src\\inscricoes.js\n===================================================================\n--- C:\\semana-academica\\api\\src\\inscricoes.js\n+++ C:\\semana-academica\\api\\src\\inscricoes.js\n@@ -254,9 +254,9 @@\n }\n \n export function processarEsperaDa(atividadeId) {\n   const atividade = buscarAtividade(atividadeId)\n-  if (!atividade || atividade.cancelada) {\n+  if (!atividade || atividade.situacao === 'cancelada') {\n     return\n   }\n   let baseDaProxima = null\n   let mudou = true\n",
+       "filediff": {
+        "file": "C:\\semana-academica\\api\\src\\inscricoes.js",
+        "patch": "Index: C:\\semana-academica\\api\\src\\inscricoes.js\n===================================================================\n--- C:\\semana-academica\\api\\src\\inscricoes.js\n+++ C:\\semana-academica\\api\\src\\inscricoes.js\n@@ -254,9 +254,9 @@\n }\n \n export function processarEsperaDa(atividadeId) {\n   const atividade = buscarAtividade(atividadeId)\n-  if (!atividade || atividade.cancelada) {\n+  if (!atividade || atividade.situacao === 'cancelada') {\n     return\n   }\n   let baseDaProxima = null\n   let mudou = true\n",
+        "additions": 1,
+        "deletions": 1
+       },
+       "truncated": false
+      },
+      "title": "api\\src\\inscricoes.js",
+      "time": {
+       "start": 1789682546984,
+       "end": 1789682546993
+      }
+     },
+     "id": "prt_0b1646dde0013QDZkMljeWSq7u",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16463d9001nfTUSTQK6SkQee"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 40025,
+      "input": 315,
+      "output": 542,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 39168
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1647b0c001f7zQ1b4yatgQ3K",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16463d9001nfTUSTQK6SkQee"
+    },
+    {
+     "type": "patch",
+     "hash": "86612ee6053b2c793575bc053254ab446f8a6721",
+     "files": [
+      "C:/semana-academica/api/src/atividades.js",
+      "C:/semana-academica/api/src/inscricoes.js"
+     ],
+     "id": "prt_0b1647c860017wrBaAB8KVUO2G",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16463d9001nfTUSTQK6SkQee"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 40149,
+     "input": 377,
+     "output": 92,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 39680
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682547856,
+     "completed": 1789682553807
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b1647c90001iIqLq2oAXqAT2J",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-start",
+     "id": "prt_0b16488260017TCIZ5d1Iv6bDY",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1647c90001iIqLq2oAXqAT2J"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now run the new test, then the full suite.",
+     "time": {
+      "start": 1789682550974,
+      "end": 1789682551483
+     },
+     "id": "prt_0b16488be001RbyXdqxNl8ORD2",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1647c90001iIqLq2oAXqAT2J"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_a2602ab443824d20939bd234",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "node --test test/atividades-contrato.test.js",
+       "workdir": "C:\\semana-academica\\api"
+      },
+      "output": "▶ Contrato — Atividade sem o campo interno cancelada\n  ✔ POST /atividades responde Atividade com exatamente os campos do contrato (46.72ms)\n  ✔ GET /atividades/:id responde Atividade com exatamente os campos do contrato (9.5247ms)\n  ✔ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (7.2432ms)\n✔ Contrato — Atividade sem o campo interno cancelada (70.1695ms)\nℹ tests 3\nℹ suites 1\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 269.2939\n",
+      "metadata": {
+       "output": "▶ Contrato — Atividade sem o campo interno cancelada\n  ✔ POST /atividades responde Atividade com exatamente os campos do contrato (46.72ms)\n  ✔ GET /atividades/:id responde Atividade com exatamente os campos do contrato (9.5247ms)\n  ✔ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (7.2432ms)\n✔ Contrato — Atividade sem o campo interno cancelada (70.1695ms)\nℹ tests 3\nℹ suites 1\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 269.2939\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "node --test test/atividades-contrato.test.js",
+      "time": {
+       "start": 1789682552420,
+       "end": 1789682553011
+      }
+     },
+     "id": "prt_0b1648abe001WIeheMk2t2MxBk",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1647c90001iIqLq2oAXqAT2J"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 40149,
+      "input": 377,
+      "output": 92,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 39680
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1649275001PZc0Fnj1loR92u",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b1647c90001iIqLq2oAXqAT2J"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 40398,
+     "input": 392,
+     "output": 70,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 39936
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682553812,
+     "completed": 1789682559261
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b16493d400173a4FULJpaVv2R",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-start",
+     "id": "prt_0b16498f9001QznUUMzHKegMMh",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16493d400173a4FULJpaVv2R"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_1b0ae17ce6e54cd698e6d363",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "npm test",
+       "workdir": "C:\\semana-academica\\api"
+      },
+      "output": "\n> semana-academica-api@0.1.0 test\n> node --test test/*.test.js\n\n▶ Contrato — Atividade sem o campo interno cancelada\n  ✔ POST /atividades responde Atividade com exatamente os campos do contrato (90.5787ms)\n  ✔ GET /atividades/:id responde Atividade com exatamente os campos do contrato (11.1125ms)\n  ✔ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (15.0501ms)\n✔ Contrato — Atividade sem o campo interno cancelada (129.6912ms)\n▶ F2 — validações da criação\n  ✔ recusa quantidade de encontros fora do limite por tipo (133.2636ms)\n  ✔ recusa encontro fora da janela ou atravessando a meia-noite, mas aceita qualquer horário (42.3518ms)\n  ✔ recusa encontros da mesma atividade que se sobrepõem ou se tocam (29.9089ms)\n  ✔ recusa encontro com duração fora de 1h a 4h inclusive (28.0704ms)\n  ✔ recusa vagas 0, negativa ou fracionária como DADOS_INVALIDOS (16.343ms)\n  ✔ prioriza QUANTIDADE_DE_ENCONTROS sobre ENCONTRO_INVALIDO (5.4007ms)\n✔ F2 — validações da criação (273.4533ms)\n▶ F3 — vagas e conflito de sala\n  ✔ recusa vagas acima da capacidade da sala e aceita lotar até a capacidade (103.4043ms)\n  ✔ recusa outra atividade na mesma sala a menos de 15 min do fim de um encontro (30.5632ms)\n  ✔ cancelar atividade libera a sala para outra atividade no mesmo horário (45.2478ms)\n  ✔ PATCH elevando vagas além da capacidade devolve 422 VAGAS_ACIMA_DA_CAPACIDADE (16.6642ms)\n  ✔ prioriza ENCONTRO_INVALIDO sobre VAGAS_ACIMA_DA_CAPACIDADE e esta sobre CONFLITO_DE_SALA (12.632ms)\n✔ F3 — vagas e conflito de sala (223.0327ms)\n▶ F4 — alterar atividade\n  ✔ PATCH aceita só titulo e vagas; tipo/salaId/encontros/campo fora devolvem CAMPO_NAO_EDITAVEL (178.7171ms)\n  ✔ PATCH com o 1º encontro já começado pelo relógio devolve 422 CAMPO_NAO_EDITAVEL (18.6806ms)\n  ✔ PATCH em atividade cancelada devolve ATIVIDADE_CANCELADA, vencendo CAMPO_NAO_EDITAVEL (28.1737ms)\n  ✔ prioriza CAMPO_NAO_EDITAVEL sobre VAGAS_ACIMA_DA_CAPACIDADE no PATCH (5.5665ms)\n  ✔ PATCH não muda sala nem encontros, e os ids enc_ continuam os mesmos (9.3205ms)\n  ✔ titulo aceita string vazia, um caractere e duplicado; PATCH também (16.628ms)\n✔ F4 — alterar atividade (270.2738ms)\n▶ F5 — cancelamento e situação\n  ✔ só se cancela antes do início; no instante exato ou depois é ATIVIDADE_JA_INICIADA (145.1496ms)\n  ✔ cancelar de novo uma atividade cancelada devolve 422 ATIVIDADE_CANCELADA (8.1587ms)\n  ✔ relógio no início do 1º encontro mostra em_andamento; 1 min antes, prevista (29.9859ms)\n  ✔ relógio no fim do último encontro mostra encerrada; 1 min antes, em_andamento (15.8521ms)\n  ✔ cancelada prevalece sobre o relógio e a leitura devolve 200 com situacao cancelada (17.456ms)\n  ✔ atividade cancelada não pode ser alterada nem cancelada de novo, e mantém os calculados (10.2141ms)\n✔ F5 — cancelamento e situação (238.8085ms)\n▶ F6 — listagem e filtros\n  ✔ listagem ordena pelo início do 1º encontro, desempatando por titulo (134.556ms)\n  ✔ atividade cancelada continua na listagem e aparece no filtro de dia (31.3131ms)\n  ✔ ?dia retorna quem tem encontro naquele dia do fuso de Brasília (19.5122ms)\n  ✔ ?dia e ?tipo combinam em AND (27.0303ms)\n  ✔ filtro com valor inválido devolve 422 DADOS_INVALIDOS (5.0868ms)\n✔ F6 — listagem e filtros (228.9488ms)\n▶ F1 — criar e ler atividade\n  ✔ POST /atividades com org-ana e corpo válido devolve 201 com a Atividade (188.8319ms)\n  ✔ POST /atividades devolve ocupadas 0, vagasRestantes igual a vagas e emEspera 0 (8.3935ms)\n  ✔ POST ignorando cargaHorariaMinutos enviado no corpo e devolvendo a soma (7.8925ms)\n  ✔ POST soma 90+75 minutos em 165, sem arredondamento (6.0835ms)\n  ✔ POST /atividades com participante devolve 403 SOMENTE_ORGANIZACAO (6.4006ms)\n  ✔ GET /atividades com participante devolve 200 com a atividade criada (7.3885ms)\n  ✔ GET /atividades/:id com org-ana devolve 200 com a atividade criada (10.9886ms)\n  ✔ GET /atividades/:id em id inexistente devolve 404 NAO_ENCONTRADO (4.8354ms)\n  ✔ POST /atividades sem titulo devolve 422 DADOS_INVALIDOS (11.1377ms)\n  ✔ POST /atividades com tipo \"oficina\" devolve 422 DADOS_INVALIDOS (9.4173ms)\n  ✔ POST /atividades com salaId inexistente devolve 404 NAO_ENCONTRADO (4.7093ms)\n  ✔ POST /_teste/reset apaga a atividade criada e devolve os dados iniciais intactos (12.6172ms)\n✔ F1 — criar e ler atividade (292.7277ms)\n▶ F1 — criar, ler e listar inscrição\n  ✔ POST /atividades/:id/inscricoes com vaga devolve 201 com Inscricao confirmada completa (175.2356ms)\n  ✔ POST /atividades/:id/inscricoes com organizacao devolve 403 SOMENTE_PARTICIPANTE mesmo em atividade inexistente (7.641ms)\n  ✔ POST /atividades/:id/inscricoes em atividade inexistente devolve 404 NAO_ENCONTRADO (10.1891ms)\n  ✔ segunda inscricao da mesma pessoa na mesma atividade devolve 409 JA_INSCRITO (23.797ms)\n  ✔ GET /inscricoes com participante devolve so as proprias e com filtro atividadeId (22.8043ms)\n  ✔ GET /inscricoes/:id de outro participante devolve 200 com a inscricao alheia (11.2942ms)\n  ✔ cancelar ou confirmar inscricao de outro participante devolve 404 NAO_ENCONTRADO (8.7269ms)\n  ✔ GET /inscricoes/:id inexistente devolve 404 NAO_ENCONTRADO (2.8752ms)\n  ✔ organizacao nas tres escritas de M2 devolve 403 SOMENTE_PARTICIPANTE (10.6188ms)\n✔ F1 — criar, ler e listar inscrição (287.5463ms)\n▶ F2 — lista de espera\n  ✔ inscricao sem vaga nasce em_espera com posicaoNaEspera em ordem de chegada (159.5039ms)\n  ✔ cancelar em_espera tira da fila e reindexa os demais, no mesmo instante criado (25.5943ms)\n  ✔ quem cancelou pode se reinscrever e entra no fim da fila (21.8008ms)\n✔ F2 — lista de espera (218.9927ms)\n✖ test\\inscricoes-f3.test.js (1243.7059ms)\n▶ F4 — convocacao e expiracao\n  ✔ cancelar confirmada libera vaga e o 1o da fila ja aparece convocado sem outro acesso (144.0686ms)\n  ✔ PATCH aumentando vagas libera vaga e promove o 1o da fila (16.4339ms)\n  ✔ convocadaAte nunca passa do fechamento das inscricoes (14.1527ms)\n  ✔ convocacao vencida expira em cascata e o praco do proximo conta do vencimento anterior (60.5794ms)\n  ✔ expirada pode se reinscrever e entra no fim da fila (12.0304ms)\n✔ F4 — convocacao e expiracao (274.0294ms)\n▶ F5 — confirmacao\n  ✔ confirmar convocada no prazo devolve 200 com confirmada e campos null (175.1108ms)\n  ✔ confirmar em_espera devolve 422 SEM_CONVOCACAO (13.5357ms)\n  ✔ confirmar convocada vencida devolve 422 CONVOCACAO_EXPIRADA (14.2001ms)\n  ✔ confirmar exatamente em convocadaAte e aceito (prazo ate X inclui X) (27.3432ms)\n  ✔ conflito criado depois recusa a confirmacao com 409 e a convocacao continua valida (37.4629ms)\n  ✔ confirmar o 4o minicurso devolve 422 LIMITE_DE_MINICURSOS e segue convocada (55.9597ms)\n  ✔ convocada vencida com conflito recusa CONVOCACAO_EXPIRADA, 1a condicao da ordem (10.9988ms)\n  ✔ convocada com novo conflito E 4o minicurso recusa CONFLITO_DE_HORARIO, antes do limite (29.7687ms)\n✔ F5 — confirmacao (376.7979ms)\n▶ F6 — cancelamento proprio\n  ✔ 1 minuto antes do inicio o cancelamento devolve 200 (275.087ms)\n  ✔ no instante exato do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (21.4603ms)\n  ✔ depois do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (11.6969ms)\n  ✔ cancelar inscricao cancelada devolve 422 INSCRICAO_INATIVA (16.3518ms)\n  ✔ cancelar inscricao expirada devolve 422 INSCRICAO_INATIVA (23.8733ms)\n  ✔ inscricao cancelada em atividade ja iniciada devolve ATIVIDADE_JA_INICIADA (prioridade) (14.084ms)\n  ✔ cancelar convocada libera vaga e promove o proximo da fila (50.9112ms)\n✔ F6 — cancelamento proprio (425.8476ms)\n▶ F7 — atividade cancelada e campos do M1\n  ✔ cancelar atividade transforma todas as ativas em cancelada e nao promove ninguem (255.7855ms)\n  ✔ GET /atividades/:id mostra ocupadas, emEspera e vagasRestantes calculados (15.2852ms)\n  ✔ PATCH reduzindo vagas abaixo dos ocupantes devolve 409 VAGAS_ABAIXO_DOS_INSCRITOS (27.7929ms)\n  ✔ com atividade cancelada os campos continuam calculados: ocupadas 0 e emEspera 0 (9.8385ms)\n✔ F7 — atividade cancelada e campos do M1 (319.2682ms)\n▶ F4 — rotas de teste ativas com MODO_TESTE=1\n  ✔ PUT /_teste/relogio com {agora} responde 200 com o valor recebido (99.9192ms)\n  ✔ PUT /_teste/relogio com corpo não-JSON devolve 422 DADOS_INVALIDOS (29.474ms)\n  ✔ GET /_teste/relogio retorna o último horário definido por PUT e fica parado (10.2873ms)\n  ✔ POST /_teste/reset zera o relógio em 09:00 e mantém as 4 salas (29.2109ms)\n✔ F4 — rotas de teste ativas com MODO_TESTE=1 (186.1247ms)\n▶ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404\n  ✔ GET, POST e PUT em /_teste/* devolvem 404 (77.4067ms)\n✔ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404 (80.8273ms)\n▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (168.5367ms)\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (40.5817ms)\n  ✔ atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18) (29.1339ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (292.0923ms)\n▶ F1 — Emitir o código do encontro\n  ✔ participante em GET /encontros/:id/codigo recebe 403 SOMENTE_ORGANIZACAO (102.5337ms)\n  ✔ GET /encontros/:id/codigo em encontro inexistente devolve 404 NAO_ENCONTRADO (10.3219ms)\n  ✔ GET /encontros/:id/codigo em 18:45:00 (inicio - 15 min) devolve 200 com o CodigoDoEncontro (49.0494ms)\n  ✔ GET /encontros/:id/codigo em 18:44:59 devolve 422 FORA_DA_JANELA (18.1893ms)\n  ✔ GET /encontros/:id/codigo em 19:30:00 (inicio + 30 min) devolve 200 (12.8834ms)\n  ✔ GET /encontros/:id/codigo em 19:30:01 devolve 422 FORA_DA_JANELA (23.1849ms)\n  ✔ código das 19:03 tem 6 caracteres do alfabeto, trocaEm 19:04:00 e validoAte 19:05:00 (11.229ms)\n  ✔ dois GET /encontros/:id/codigo no mesmo minuto devolvem o mesmo código, trocaEm e validoAte (17.6984ms)\n  ✔ ao cruzar o minuto o código gira e trocaEm aponta o próximo hh:mm:00 (14.3294ms)\n  ✔ GET /encontros/:id/codigo em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (17.0033ms)\n  ✔ atividade cancelada fora da janela devolve ATIVIDADE_CANCELADA antes de FORA_DA_JANELA (8.1751ms)\n  ✔ PATCH de título/vagas não muda o código nem a validade no mesmo minuto (18.4297ms)\n  ✔ dois encontros no mesmo minuto têm códigos diferentes (o código é do encontro, não do minuto) (16.3167ms)\n✔ F1 — Emitir o código do encontro (335.4903ms)\n▶ F2 — Presença QR online\n  ✔ organização em POST /encontros/:id/presencas recebe 403 SOMENTE_PARTICIPANTE mesmo em encontro inexistente (168.3285ms)\n  ✔ POST /encontros/:id/presencas em encontro inexistente devolve 404 NAO_ENCONTRADO (7.9091ms)\n  ✔ encontro inexistente com corpo inválido devolve 404 (existência antes do corpo) (14.6053ms)\n  ✔ POST sem codigo no corpo devolve 422 DADOS_INVALIDOS (24.5583ms)\n  ✔ POST com codigo de tipo errado devolve 422 DADOS_INVALIDOS (11.5747ms)\n  ✔ primeira presença devolve 201 com Presenca qr completa no instante do envio (24.5524ms)\n  ✔ repetir o POST devolve 200 com a mesma presença, mesmo id e mesmos instantes (14.165ms)\n  ✔ POST sem inscrição na atividade devolve 403 NAO_INSCRITO (15.5301ms)\n  ✔ POST com inscrição em_espera devolve 403 NAO_INSCRITO (50.331ms)\n  ✔ aceita presença em 18:45:00 (inicio - 15 min, borda da abertura) (15.7326ms)\n  ✔ recusa presença em 18:44:59 (inicio - 15 min - 1 s, fora da janela) (19.367ms)\n  ✔ aceita presença em 19:30:00 (inicio + 30 min, borda do fechamento) (10.8906ms)\n  ✔ recusa presença em 19:30:01 (inicio + 30 min + 1 s, fora da janela) (13.6776ms)\n  ✔ aceita código emitido às 19:03 enviado às 19:04:59 (minuto anterior) (21.8158ms)\n  ✔ recusa código emitido às 19:03 enviado às 19:05:00 (validoAte) (16.6157ms)\n  ✔ aceita código em minúscula (17.1182ms)\n  ✔ aceita código com espaço (14.2356ms)\n  ✔ recusa código com caractere fora do alfabeto com 422 CODIGO_INVALIDO (9.8158ms)\n  ✔ recusa código emitido para outro encontro com 422 CODIGO_INVALIDO (13.5077ms)\n  ✔ presença existente fora da janela devolve 200 com a mesma presença (R11 antes de R1) (22.6166ms)\n  ✔ presença existente com código errado devolve 200 com a mesma presença (R11 antes de R6/R7) (16.414ms)\n  ✔ não inscrito, fora da janela e código válido devolve 403 NAO_INSCRITO (R8 antes de R1) (16.0605ms)\n  ✔ fora da janela com código errado devolve 422 FORA_DA_JANELA (R1 antes de R6/R7) (11.5775ms)\n✔ F2 — Presença QR online (562.8761ms)\n▶ F3 — Presença offline (lidoEm)\n  ✔ envio às 20:00 com lidoEm 19:10:30 devolve 201 com origem qr_offline, lidoEm e registradaEm 20:00 (R10, R12) (267.3606ms)\n  ✔ envio às 00:00:01 (fim + 2 h + 1 s) devolve 422 SINCRONIZACAO_TARDIA (R9) (41.7323ms)\n  ✔ envio às 00:00:00 (fim + 2 h, borda) com lidoEm 19:10:30 devolve 201 (R9) (16.4734ms)\n  ✔ lidoEm 18:44:59 com envio dentro da janela devolve 422 FORA_DA_JANELA (R12) (17.5986ms)\n  ✔ lidoEm 19:30:01 com envio depois do fechamento devolve 422 FORA_DA_JANELA (R12) (21.4472ms)\n  ✔ lidoEm no futuro não é erro: devolve 201 e grava o instante do envio como lidoEm (R12) (17.1341ms)\n  ✔ lidoEm que não é string ISO válida devolve 422 DADOS_INVALIDOS (12.989ms)\n  ✔ lidoEm de tipo errado devolve 422 DADOS_INVALIDOS (20.9092ms)\n  ✔ reenvio do mesmo lidoEm devolve 200 com o mesmo id e a mesma presença (R11) (26.4355ms)\n  ✔ código errado com envio tardio devolve 422 SINCRONIZACAO_TARDIA, antes de CODIGO_INVALIDO (R16) (19.5862ms)\n  ✔ não inscrito com envio tardio devolve 403 NAO_INSCRITO, antes de SINCRONIZACAO_TARDIA (R16) (15.8933ms)\n  ✔ atividade cancelada antes do envio: presença lida antes do cancelamento devolve 403 NAO_INSCRITO (R18) (27.0712ms)\n  ✔ atividade cancelada depois da presença registrada: reenvio devolve 200 com a mesma presença (R18) (25.8196ms)\n✔ F3 — Presença offline (lidoEm) (545.2662ms)\n▶ F4 — Presença manual\n  ✔ manual válida às 20:00 por org-ana para p-carla confirmada devolve 201 com origem manual e justificativa gravada (R10, R15) (150.8658ms)\n  ✔ manual aceita em 18:45:00 (inicio − 15 min, borda da abertura da janela manual) (21.5188ms)\n  ✔ manual recusada em 18:44:59 (inicio − 15 min − 1 s) com 422 FORA_DA_JANELA (20.6306ms)\n  ✔ manual aceita às 00:00:00 de 20/10 (fim + 2 h, borda do fechamento da janela manual) (11.7077ms)\n  ✔ manual recusada às 00:00:01 de 20/10 (fim + 2 h + 1 s) com 422 FORA_DA_JANELA (15.9042ms)\n  ✔ manual sem justificativa devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (10.7484ms)\n  ✔ manual com justificativa vazia devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (15.5103ms)\n  ✔ manual com justificativa só de espaços devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (15.4689ms)\n  ✔ manual com justificativa de 3 caracteres devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (17.6363ms)\n  ✔ manual com justificativa de tipo errado devolve 422 DADOS_INVALIDOS (R13) (13.2449ms)\n  ✔ manual sem participanteId devolve 422 DADOS_INVALIDOS (15.9407ms)\n  ✔ manual para participante em_espera devolve 403 NAO_INSCRITO (R8) (17.7227ms)\n  ✔ manual para participanteId desconhecido devolve 403 NAO_INSCRITO (R8) (7.3778ms)\n  ✔ com 5 confirmadas, a 1ª manual devolve 201 e a 2ª (para outro participante) devolve 422 LIMITE_DE_MANUAIS (R14) (28.5993ms)\n  ✔ com 1 confirmada, a 1ª manual ainda devolve 201 (10% arredondando para cima, R14) (10.2321ms)\n  ✔ manual repetida para quem já tem presença QR devolve 200 com a mesma presença (R11 antes de R8/R15) (29.4614ms)\n  ✔ manual repetida para quem já tem presença manual devolve 200 com a mesma presença, antes do limite (R17) (11.4291ms)\n  ✔ em_espera com justificativa curta devolve 422 JUSTIFICATIVA_OBRIGATORIA, antes de NAO_INSCRITO (R17) (10.8182ms)\n  ✔ limite atingido e fora da janela devolve 422 FORA_DA_JANELA, antes de LIMITE_DE_MANUAIS (R17) (27.8439ms)\n  ✔ participante em POST /encontros/:id/presencas/manual devolve 403 SOMENTE_ORGANIZACAO (R22) (5.44ms)\n  ✔ quem já tem presença manual, com justificativa curta, recebe 422 JUSTIFICATIVA_OBRIGATORIA — justificativa vem antes da presença existente (R17) (11.4883ms)\n✔ F4 — Presença manual (483.1205ms)\n▶ F5 — Lista de presenças\n  ✔ GET sem nenhuma presença registrada devolve 200 com lista vazia (R19) (112.2819ms)\n  ✔ p-carla QR 19:03:45 e p-diego manual 20:00 → lista com 2, p-carla antes de p-diego, com os campos do contrato (R19) (36.7673ms)\n  ✔ duas presenças com o mesmo registradaEm ficam em ordem crescente por id (R19) (37.6807ms)\n  ✔ presença registrada às 18:47 continua na lista após cancelar a atividade às 18:50 (R24) (18.4451ms)\n  ✔ participante em GET /encontros/:id/presencas devolve 403 SOMENTE_ORGANIZACAO (R22) (10.5975ms)\n  ✔ GET de encontro inexistente devolve 404 NAO_ENCONTRADO (R22) (4.1513ms)\n  ✔ DELETE e PATCH de presença devolvem 404 NAO_ENCONTRADO em JSON — não há rota de edição nem apagamento (R20) (18.6635ms)\n  ✔ POST /encontros/:id/saidas devolve 404 NAO_ENCONTRADO em JSON — não há rota de saída (R21) (8.481ms)\n✔ F5 — Lista de presenças (262.2ms)\n▶ F3 — dados iniciais e GET /salas\n  ✔ GET /salas com X-Usuario: p-carla retorna 200 com as 4 salas iniciais (35.6758ms)\n  ✔ GET /salas sem X-Usuario devolve 401 USUARIO_DESCONHECIDO (5.0077ms)\n  ✔ GET /salas com X-Usuario inexistente devolve 401 USUARIO_DESCONHECIDO (3.4856ms)\n✔ F3 — dados iniciais e GET /salas (53.0548ms)\nℹ tests 169\nℹ suites 22\nℹ pass 168\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2630.9953\n\n✖ failing tests:\n\ntest at test\\inscricoes-f3.test.js:1:1\n✖ test\\inscricoes-f3.test.js (1243.7059ms)\n  'test failed'\n",
+      "metadata": {
+       "output": "\n> semana-academica-api@0.1.0 test\n> node --test test/*.test.js\n\n▶ Contrato — Atividade sem o campo interno cancelada\n  ✔ POST /atividades responde Atividade com exatamente os campos do contrato (90.5787ms)\n  ✔ GET /atividades/:id responde Atividade com exatamente os campos do contrato (11.1125ms)\n  ✔ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (15.0501ms)\n✔ Contrato — Atividade sem o campo interno cancelada (129.6912ms)\n▶ F2 — validações da criação\n  ✔ recusa quantidade de encontros fora do limite por tipo (133.2636ms)\n  ✔ recusa encontro fora da janela ou atravessando a meia-noite, mas aceita qualquer horário (42.3518ms)\n  ✔ recusa encontros da mesma atividade que se sobrepõem ou se tocam (29.9089ms)\n  ✔ recusa encontro com duração fora de 1h a 4h inclusive (28.0704ms)\n  ✔ recusa vagas 0, negativa ou fracionária como DADOS_INVALIDOS (16.343ms)\n  ✔ prioriza QUANTIDADE_DE_ENCONTROS sobre ENCONTRO_INVALIDO (5.4007ms)\n✔ F2 — validações da criação (273.4533ms)\n▶ F3 — vagas e conflito de sala\n  ✔ recusa vagas acima da capacidade da sala e aceita lotar até a capacidade (103.4043ms)\n  ✔ recusa outra atividade na mesma sala a menos de 15 min do fim de um encontro (30.5632ms)\n  ✔ cancelar atividade libera a sala para outra atividade no mesmo horário (45.2478ms)\n  ✔ PATCH elevando vagas além da capacidade devolve 422 VAGAS_ACIMA_DA_CAPACIDADE (16.6642ms)\n  ✔ prioriza ENCONTRO_INVALIDO sobre VAGAS_ACIMA_DA_CAPACIDADE e esta sobre CONFLITO_DE_SALA (12.632ms)\n✔ F3 — vagas e conflito de sala (223.0327ms)\n▶ F4 — alterar atividade\n  ✔ PATCH aceita só titulo e vagas; tipo/salaId/encontros/campo fora devolvem CAMPO_NAO_EDITAVEL (178.7171ms)\n  ✔ PATCH com o 1º encontro já começado pelo relógio devolve 422 CAMPO_NAO_EDITAVEL (18.6806ms)\n  ✔ PATCH em atividade cancelada devolve ATIVIDADE_CANCELADA, vencendo CAMPO_NAO_EDITAVEL (28.1737ms)\n  ✔ prioriza CAMPO_NAO_EDITAVEL sobre VAGAS_ACIMA_DA_CAPACIDADE no PATCH (5.5665ms)\n  ✔ PATCH não muda sala nem encontros, e os ids enc_ continuam os mesmos (9.3205ms)\n  ✔ titulo aceita string vazia, um caractere e duplicado; PATCH também (16.628ms)\n✔ F4 — alterar atividade (270.2738ms)\n▶ F5 — cancelamento e situação\n  ✔ só se cancela antes do início; no instante exato ou depois é ATIVIDADE_JA_INICIADA (145.1496ms)\n  ✔ cancelar de novo uma atividade cancelada devolve 422 ATIVIDADE_CANCELADA (8.1587ms)\n  ✔ relógio no início do 1º encontro mostra em_andamento; 1 min antes, prevista (29.9859ms)\n  ✔ relógio no fim do último encontro mostra encerrada; 1 min antes, em_andamento (15.8521ms)\n  ✔ cancelada prevalece sobre o relógio e a leitura devolve 200 com situacao cancelada (17.456ms)\n  ✔ atividade cancelada não pode ser alterada nem cancelada de novo, e mantém os calculados (10.2141ms)\n✔ F5 — cancelamento e situação (238.8085ms)\n▶ F6 — listagem e filtros\n  ✔ listagem ordena pelo início do 1º encontro, desempatando por titulo (134.556ms)\n  ✔ atividade cancelada continua na listagem e aparece no filtro de dia (31.3131ms)\n  ✔ ?dia retorna quem tem encontro naquele dia do fuso de Brasília (19.5122ms)\n  ✔ ?dia e ?tipo combinam em AND (27.0303ms)\n  ✔ filtro com valor inválido devolve 422 DADOS_INVALIDOS (5.0868ms)\n✔ F6 — listagem e filtros (228.9488ms)\n▶ F1 — criar e ler atividade\n  ✔ POST /atividades com org-ana e corpo válido devolve 201 com a Atividade (188.8319ms)\n  ✔ POST /atividades devolve ocupadas 0, vagasRestantes igual a vagas e emEspera 0 (8.3935ms)\n  ✔ POST ignorando cargaHorariaMinutos enviado no corpo e devolvendo a soma (7.8925ms)\n  ✔ POST soma 90+75 minutos em 165, sem arredondamento (6.0835ms)\n  ✔ POST /atividades com participante devolve 403 SOMENTE_ORGANIZACAO (6.4006ms)\n  ✔ GET /atividades com participante devolve 200 com a atividade criada (7.3885ms)\n  ✔ GET /atividades/:id com org-ana devolve 200 com a atividade criada (10.9886ms)\n  ✔ GET /atividades/:id em id inexistente devolve 404 NAO_ENCONTRADO (4.8354ms)\n  ✔ POST /atividades sem titulo devolve 422 DADOS_INVALIDOS (11.1377ms)\n  ✔ POST /atividades com tipo \"oficina\" devolve 422 DADOS_INVALIDOS (9.4173ms)\n  ✔ POST /atividades com salaId inexistente devolve 404 NAO_ENCONTRADO (4.7093ms)\n  ✔ POST /_teste/reset apaga a atividade criada e devolve os dados iniciais intactos (12.6172ms)\n✔ F1 — criar e ler atividade (292.7277ms)\n▶ F1 — criar, ler e listar inscrição\n  ✔ POST /atividades/:id/inscricoes com vaga devolve 201 com Inscricao confirmada completa (175.2356ms)\n  ✔ POST /atividades/:id/inscricoes com organizacao devolve 403 SOMENTE_PARTICIPANTE mesmo em atividade inexistente (7.641ms)\n  ✔ POST /atividades/:id/inscricoes em atividade inexistente devolve 404 NAO_ENCONTRADO (10.1891ms)\n  ✔ segunda inscricao da mesma pessoa na mesma atividade devolve 409 JA_INSCRITO (23.797ms)\n  ✔ GET /inscricoes com participante devolve so as proprias e com filtro atividadeId (22.8043ms)\n  ✔ GET /inscricoes/:id de outro participante devolve 200 com a inscricao alheia (11.2942ms)\n  ✔ cancelar ou confirmar inscricao de outro participante devolve 404 NAO_ENCONTRADO (8.7269ms)\n  ✔ GET /inscricoes/:id inexistente devolve 404 NAO_ENCONTRADO (2.8752ms)\n  ✔ organizacao nas tres escritas de M2 devolve 403 SOMENTE_PARTICIPANTE (10.6188ms)\n✔ F1 — criar, ler e listar inscrição (287.5463ms)\n▶ F2 — lista de espera\n  ✔ inscricao sem vaga nasce em_espera com posicaoNaEspera em ordem de chegada (159.5039ms)\n  ✔ cancelar em_espera tira da fila e reindexa os demais, no mesmo instante criado (25.5943ms)\n  ✔ quem cancelou pode se reinscrever e entra no fim da fila (21.8008ms)\n✔ F2 — lista de espera (218.9927ms)\n✖ test\\inscricoes-f3.test.js (1243.7059ms)\n▶ F4 — convocacao e expiracao\n  ✔ cancelar confirmada libera vaga e o 1o da fila ja aparece convocado sem outro acesso (144.0686ms)\n  ✔ PATCH aumentando vagas libera vaga e promove o 1o da fila (16.4339ms)\n  ✔ convocadaAte nunca passa do fechamento das inscricoes (14.1527ms)\n  ✔ convocacao vencida expira em cascata e o praco do proximo conta do vencimento anterior (60.5794ms)\n  ✔ expirada pode se reinscrever e entra no fim da fila (12.0304ms)\n✔ F4 — convocacao e expiracao (274.0294ms)\n▶ F5 — confirmacao\n  ✔ confirmar convocada no prazo devolve 200 com confirmada e campos null (175.1108ms)\n  ✔ confirmar em_espera devolve 422 SEM_CONVOCACAO (13.5357ms)\n  ✔ confirmar convocada vencida devolve 422 CONVOCACAO_EXPIRADA (14.2001ms)\n  ✔ confirmar exatamente em convocadaAte e aceito (prazo ate X inclui X) (27.3432ms)\n  ✔ conflito criado depois recusa a confirmacao com 409 e a convocacao continua valida (37.4629ms)\n  ✔ confirmar o 4o minicurso devolve 422 LIMITE_DE_MINICURSOS e segue convocada (55.9597ms)\n  ✔ convocada vencida com conflito recusa CONVOCACAO_EXPIRADA, 1a condicao da ordem (10.9988ms)\n  ✔ convocada com novo conflito E 4o minicurso recusa CONFLITO_DE_HORARIO, antes do limite (29.7687ms)\n✔ F5 — confirmacao (376.7979ms)\n▶ F6 — cancelamento proprio\n  ✔ 1 minuto antes do inicio o cancelamento devolve 200 (275.087ms)\n  ✔ no instante exato do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (21.4603ms)\n  ✔ depois do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (11.6969ms)\n  ✔ cancelar inscricao cancelada devolve 422 INSCRICAO_INATIVA (16.3518ms)\n  ✔ cancelar inscricao expirada devolve 422 INSCRICAO_INATIVA (23.8733ms)\n  ✔ inscricao cancelada em atividade ja iniciada devolve ATIVIDADE_JA_INICIADA (prioridade) (14.084ms)\n  ✔ cancelar convocada libera vaga e promove o proximo da fila (50.9112ms)\n✔ F6 — cancelamento proprio (425.8476ms)\n▶ F7 — atividade cancelada e campos do M1\n  ✔ cancelar atividade transforma todas as ativas em cancelada e nao promove ninguem (255.7855ms)\n  ✔ GET /atividades/:id mostra ocupadas, emEspera e vagasRestantes calculados (15.2852ms)\n  ✔ PATCH reduzindo vagas abaixo dos ocupantes devolve 409 VAGAS_ABAIXO_DOS_INSCRITOS (27.7929ms)\n  ✔ com atividade cancelada os campos continuam calculados: ocupadas 0 e emEspera 0 (9.8385ms)\n✔ F7 — atividade cancelada e campos do M1 (319.2682ms)\n▶ F4 — rotas de teste ativas com MODO_TESTE=1\n  ✔ PUT /_teste/relogio com {agora} responde 200 com o valor recebido (99.9192ms)\n  ✔ PUT /_teste/relogio com corpo não-JSON devolve 422 DADOS_INVALIDOS (29.474ms)\n  ✔ GET /_teste/relogio retorna o último horário definido por PUT e fica parado (10.2873ms)\n  ✔ POST /_teste/reset zera o relógio em 09:00 e mantém as 4 salas (29.2109ms)\n✔ F4 — rotas de teste ativas com MODO_TESTE=1 (186.1247ms)\n▶ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404\n  ✔ GET, POST e PUT em /_teste/* devolvem 404 (77.4067ms)\n✔ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404 (80.8273ms)\n▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (168.5367ms)\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (40.5817ms)\n  ✔ atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18) (29.1339ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (292.0923ms)\n▶ F1 — Emitir o código do encontro\n  ✔ participante em GET /encontros/:id/codigo recebe 403 SOMENTE_ORGANIZACAO (102.5337ms)\n  ✔ GET /encontros/:id/codigo em encontro inexistente devolve 404 NAO_ENCONTRADO (10.3219ms)\n  ✔ GET /encontros/:id/codigo em 18:45:00 (inicio - 15 min) devolve 200 com o CodigoDoEncontro (49.0494ms)\n  ✔ GET /encontros/:id/codigo em 18:44:59 devolve 422 FORA_DA_JANELA (18.1893ms)\n  ✔ GET /encontros/:id/codigo em 19:30:00 (inicio + 30 min) devolve 200 (12.8834ms)\n  ✔ GET /encontros/:id/codigo em 19:30:01 devolve 422 FORA_DA_JANELA (23.1849ms)\n  ✔ código das 19:03 tem 6 caracteres do alfabeto, trocaEm 19:04:00 e validoAte 19:05:00 (11.229ms)\n  ✔ dois GET /encontros/:id/codigo no mesmo minuto devolvem o mesmo código, trocaEm e validoAte (17.6984ms)\n  ✔ ao cruzar o minuto o código gira e trocaEm aponta o próximo hh:mm:00 (14.3294ms)\n  ✔ GET /encontros/:id/codigo em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (17.0033ms)\n  ✔ atividade cancelada fora da janela devolve ATIVIDADE_CANCELADA antes de FORA_DA_JANELA (8.1751ms)\n  ✔ PATCH de título/vagas não muda o código nem a validade no mesmo minuto (18.4297ms)\n  ✔ dois encontros no mesmo minuto têm códigos diferentes (o código é do encontro, não do minuto) (16.3167ms)\n✔ F1 — Emitir o código do encontro (335.4903ms)\n▶ F2 — Presença QR online\n  ✔ organização em POST /encontros/:id/presencas recebe 403 SOMENTE_PARTICIPANTE mesmo em encontro inexistente (168.3285ms)\n  ✔ POST /encontros/:id/presencas em encontro inexistente devolve 404 NAO_ENCONTRADO (7.9091ms)\n  ✔ encontro inexistente com corpo inválido devolve 404 (existência antes do corpo) (14.6053ms)\n  ✔ POST sem codigo no corpo devolve 422 DADOS_INVALIDOS (24.5583ms)\n  ✔ POST com codigo de tipo errado devolve 422 DADOS_INVALIDOS (11.5747ms)\n  ✔ primeira presença devolve 201 com Presenca qr completa no instante do envio (24.5524ms)\n  ✔ repetir o POST devolve 200 com a mesma presença, mesmo id e mesmos instantes (14.165ms)\n  ✔ POST sem inscrição na atividade devolve 403 NAO_INSCRITO (15.5301ms)\n  ✔ POST com inscrição em_espera devolve 403 NAO_INSCRITO (50.331ms)\n  ✔ aceita presença em 18:45:00 (inicio - 15 min, borda da abertura) (15.7326ms)\n  ✔ recusa presença em 18:44:59 (inicio - 15 min - 1 s, fora da janela) (19.367ms)\n  ✔ aceita presença em 19:30:00 (inicio + 30 min, borda do fechamento) (10.8906ms)\n  ✔ recusa presença em 19:30:01 (inicio + 30 min + 1 s, fora da janela) (13.6776ms)\n  ✔ aceita código emitido às 19:03 enviado às 19:04:59 (minuto anterior) (21.8158ms)\n  ✔ recusa código emitido às 19:03 enviado às 19:05:00 (validoAte) (16.6157ms)\n  ✔ aceita código em minúscula (17.1182ms)\n  ✔ aceita código com espaço (14.2356ms)\n  ✔ recusa código com caractere fora do alfabeto com 422 CODIGO_INVALIDO (9.8158ms)\n  ✔ recusa código emitido para outro encontro com 422 CODIGO_INVALIDO (13.5077ms)\n  ✔ presença existente fora da janela devolve 200 com a mesma presença (R11 antes de R1) (22.6166ms)\n  ✔ presença existente com código errado devolve 200 com a mesma presença (R11 antes de R6/R7) (16.414ms)\n  ✔ não inscrito, fora da janela e código válido devolve 403 NAO_INSCRITO (R8 antes de R1) (16.0605ms)\n  ✔ fora da janela com código errado devolve 422 FORA_DA_JANELA (R1 antes de R6/R7) (11.5775ms)\n✔ F2 — Presença QR online (562.8761ms)\n▶ F3 — Presença offline (lidoEm)\n  ✔ envio às 20:00 com lidoEm 19:10:30 devolve 201 com origem qr_offline, lidoEm e registradaEm 20:00 (R10, R12) (267.3606ms)\n  ✔ envio às 00:00:01 (fim + 2 h + 1 s) devolve 422 SINCRONIZACAO_TARDIA (R9) (41.7323ms)\n  ✔ envio às 00:00:00 (fim + 2 h, borda) com lidoEm 19:10:30 devolve 201 (R9) (16.4734ms)\n  ✔ lidoEm 18:44:59 com envio dentro da janela devolve 422 FORA_DA_JANELA (R12) (17.5986ms)\n  ✔ lidoEm 19:30:01 com envio depois do fechamento devolve 422 FORA_DA_JANELA (R12) (21.4472ms)\n  ✔ lidoEm no futuro não é erro: devolve 201 e grava o instante do envio como lidoEm (R12) (17.1341ms)\n  ✔ lidoEm que não é string ISO válida devolve 422 DADOS_INVALIDOS (12.989ms)\n  ✔ lidoEm de tipo errado devolve 422 DADOS_INVALIDOS (20.9092ms)\n  ✔ reenvio do mesmo lidoEm devolve 200 com o mesmo id e a mesma presença (R11) (26.4355ms)\n  ✔ código errado com envio tardio devolve 422 SINCRONIZACAO_TARDIA, antes de CODIGO_INVALIDO (R16) (19.5862ms)\n  ✔ não inscrito com envio tardio devolve 403 NAO_INSCRITO, antes de SINCRONIZACAO_TARDIA (R16) (15.8933ms)\n  ✔ atividade cancelada antes do envio: presença lida antes do cancelamento devolve 403 NAO_INSCRITO (R18) (27.0712ms)\n  ✔ atividade cancelada depois da presença registrada: reenvio devolve 200 com a mesma presença (R18) (25.8196ms)\n✔ F3 — Presença offline (lidoEm) (545.2662ms)\n▶ F4 — Presença manual\n  ✔ manual válida às 20:00 por org-ana para p-carla confirmada devolve 201 com origem manual e justificativa gravada (R10, R15) (150.8658ms)\n  ✔ manual aceita em 18:45:00 (inicio − 15 min, borda da abertura da janela manual) (21.5188ms)\n  ✔ manual recusada em 18:44:59 (inicio − 15 min − 1 s) com 422 FORA_DA_JANELA (20.6306ms)\n  ✔ manual aceita às 00:00:00 de 20/10 (fim + 2 h, borda do fechamento da janela manual) (11.7077ms)\n  ✔ manual recusada às 00:00:01 de 20/10 (fim + 2 h + 1 s) com 422 FORA_DA_JANELA (15.9042ms)\n  ✔ manual sem justificativa devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (10.7484ms)\n  ✔ manual com justificativa vazia devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (15.5103ms)\n  ✔ manual com justificativa só de espaços devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (15.4689ms)\n  ✔ manual com justificativa de 3 caracteres devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (17.6363ms)\n  ✔ manual com justificativa de tipo errado devolve 422 DADOS_INVALIDOS (R13) (13.2449ms)\n  ✔ manual sem participanteId devolve 422 DADOS_INVALIDOS (15.9407ms)\n  ✔ manual para participante em_espera devolve 403 NAO_INSCRITO (R8) (17.7227ms)\n  ✔ manual para participanteId desconhecido devolve 403 NAO_INSCRITO (R8) (7.3778ms)\n  ✔ com 5 confirmadas, a 1ª manual devolve 201 e a 2ª (para outro participante) devolve 422 LIMITE_DE_MANUAIS (R14) (28.5993ms)\n  ✔ com 1 confirmada, a 1ª manual ainda devolve 201 (10% arredondando para cima, R14) (10.2321ms)\n  ✔ manual repetida para quem já tem presença QR devolve 200 com a mesma presença (R11 antes de R8/R15) (29.4614ms)\n  ✔ manual repetida para quem já tem presença manual devolve 200 com a mesma presença, antes do limite (R17) (11.4291ms)\n  ✔ em_espera com justificativa curta devolve 422 JUSTIFICATIVA_OBRIGATORIA, antes de NAO_INSCRITO (R17) (10.8182ms)\n  ✔ limite atingido e fora da janela devolve 422 FORA_DA_JANELA, antes de LIMITE_DE_MANUAIS (R17) (27.8439ms)\n  ✔ participante em POST /encontros/:id/presencas/manual devolve 403 SOMENTE_ORGANIZACAO (R22) (5.44ms)\n  ✔ quem já tem presença manual, com justificativa curta, recebe 422 JUSTIFICATIVA_OBRIGATORIA — justificativa vem antes da presença existente (R17) (11.4883ms)\n✔ F4 — Presença manual (483.1205ms)\n▶ F5 — Lista de presenças\n  ✔ GET sem nenhuma presença registrada devolve 200 com lista vazia (R19) (112.2819ms)\n  ✔ p-carla QR 19:03:45 e p-diego manual 20:00 → lista com 2, p-carla antes de p-diego, com os campos do contrato (R19) (36.7673ms)\n  ✔ duas presenças com o mesmo registradaEm ficam em ordem crescente por id (R19) (37.6807ms)\n  ✔ presença registrada às 18:47 continua na lista após cancelar a atividade às 18:50 (R24) (18.4451ms)\n  ✔ participante em GET /encontros/:id/presencas devolve 403 SOMENTE_ORGANIZACAO (R22) (10.5975ms)\n  ✔ GET de encontro inexistente devolve 404 NAO_ENCONTRADO (R22) (4.1513ms)\n  ✔ DELETE e PATCH de presença devolvem 404 NAO_ENCONTRADO em JSON — não há rota de edição nem apagamento (R20) (18.6635ms)\n  ✔ POST /encontros/:id/saidas devolve 404 NAO_ENCONTRADO em JSON — não há rota de saída (R21) (8.481ms)\n✔ F5 — Lista de presenças (262.2ms)\n▶ F3 — dados iniciais e GET /salas\n  ✔ GET /salas com X-Usuario: p-carla retorna 200 com as 4 salas iniciais (35.6758ms)\n  ✔ GET /salas sem X-Usuario devolve 401 USUARIO_DESCONHECIDO (5.0077ms)\n  ✔ GET /salas com X-Usuario inexistente devolve 401 USUARIO_DESCONHECIDO (3.4856ms)\n✔ F3 — dados iniciais e GET /salas (53.0548ms)\nℹ tests 169\nℹ suites 22\nℹ pass 168\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2630.9953\n\n✖ failing tests:\n\ntest at test\\inscricoes-f3.test.js:1:1\n✖ test\\inscricoes-f3.test.js (1243.7059ms)\n  'test failed'\n",
+       "exit": 1,
+       "truncated": false
+      },
+      "title": "npm test",
+      "time": {
+       "start": 1789682555311,
+       "end": 1789682558708
+      }
+     },
+     "id": "prt_0b1649986001MPodQd3qXXxsGg",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16493d400173a4FULJpaVv2R"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 40398,
+      "input": 392,
+      "output": 70,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 39936
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b164a808001tuXDRcQuT5gViL",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b16493d400173a4FULJpaVv2R"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 46928,
+     "input": 6606,
+     "output": 130,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 40192
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682559265,
+     "completed": 1789682561954
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b164a921001Hmi6aci8eL0zMX",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-start",
+     "id": "prt_0b164ae4a001DOjCITGg4Cmx8B",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164a921001Hmi6aci8eL0zMX"
+    },
+    {
+     "type": "reasoning",
+     "text": "There's a failure in `test\\inscricoes-f3.test.js`. Let me look at that file. It failed at the file level, meaning the whole file failed. Let me run it and see the actual error.",
+     "time": {
+      "start": 1789682560588,
+      "end": 1789682560740
+     },
+     "id": "prt_0b164ae4c001lJNUM5S2z0Q1JV",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164a921001Hmi6aci8eL0zMX"
+    },
+    {
+     "type": "text",
+     "text": "The suite reports a failing file `inscricoes-f3.test.js`. Let me investigate.",
+     "time": {
+      "start": 1789682560743,
+      "end": 1789682560984
+     },
+     "id": "prt_0b164aee70013rrIeb3jTBvRPi",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164a921001Hmi6aci8eL0zMX"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_d740589621f64d16b013de64",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\semana-academica\\api\\test\\inscricoes-f3.test.js"
+      },
+      "output": "[19666 caracteres omitidos]",
+      "title": "api\\test\\inscricoes-f3.test.js",
+      "time": {
+       "start": 1789682560919,
+       "end": 1789682560940
+      }
+     },
+     "id": "prt_0b164af3b001o23DiCgSG37VWS",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164a921001Hmi6aci8eL0zMX"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 46928,
+      "input": 6606,
+      "output": 130,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 40192
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b164b117001G1AWDfGh6MCZW1",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164a921001Hmi6aci8eL0zMX"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 54272,
+     "input": 7283,
+     "output": 141,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 46848
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682561961,
+     "completed": 1789682565489
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b164b3a9001bKusM9RfF1PRoM",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-start",
+     "id": "prt_0b164b872001vpD79MkSWYtCod",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164b3a9001bKusM9RfF1PRoM"
+    },
+    {
+     "type": "reasoning",
+     "text": "The whole file failed. Let me run just this file alone to see what error it throws. It's possible it's timing-related or a crash (the file-level failure with 'test failed' suggests the whole file failed, possibly a beforeEach failure or an open handle). Let me run it alone.",
+     "time": {
+      "start": 1789682563188,
+      "end": 1789682563696
+     },
+     "id": "prt_0b164b874001m9dXGOYJnd3fj2",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164b3a9001bKusM9RfF1PRoM"
+    },
+    {
+     "type": "text",
+     "text": "\n\n",
+     "time": {
+      "start": 1789682563697,
+      "end": 1789682563947
+     },
+     "id": "prt_0b164ba71001cuMGQrq9DasgIa",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164b3a9001bKusM9RfF1PRoM"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_2e7b91270f5040a0a6fb8ef5",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "node --test test/inscricoes-f3.test.js",
+       "workdir": "C:\\semana-academica\\api"
+      },
+      "output": "▶ F3 — fechamento e recusas do POST\n  ✔ inscrever em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (55.4687ms)\n  ✔ inscricoes fecham 30 min antes do 1o encontro: 18h29 aceita, 18h30 inclusive recusa (14.2245ms)\n  ✔ em_andamento e encerrada tambem recusam com INSCRICOES_ENCERRADAS (9.6021ms)\n  ✔ encontro sobreposto com confirmada devolve 409 CONFLITO_DE_HORARIO (7.5699ms)\n  ✔ encontro que apenas encosta (fim de um = inicio do outro) nao conflita (6.7588ms)\n  ✔ so colide com em_espera nao bloqueia: inscricao nova em horario do em_espera vira confirmada (6.7818ms)\n  ✔ colisao só no 2o encontro de atividade multiencontro devolve conflito (9.7771ms)\n  ✔ 4o minicurso com vaga quando ja ocupa 3 devolve 422 LIMITE_DE_MINICURSOS (18.1985ms)\n  ✔ 4o minicurso sem vaga nao e recusado no limite: nasce em_espera (10.061ms)\n  ✔ 4o palestra com vaga nao conta para o limite de minicursos (7.2835ms)\n  ✔ com 1 dos 3 minicursos cancelado, o 4o com vaga nasce confirmada (10.3735ms)\n  ✔ atividade cancelada vence encerrada na ordem da regra R6 (4.8368ms)\n  ✔ encerrada vence ja_inscrito: ja ativo em atividade fechada recusa com INSCRICOES_ENCERRADAS (4.6156ms)\n✔ F3 — fechamento e recusas do POST (173.4483ms)\nℹ tests 13\nℹ suites 1\nℹ pass 13\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 373.2793\n",
+      "metadata": {
+       "output": "▶ F3 — fechamento e recusas do POST\n  ✔ inscrever em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (55.4687ms)\n  ✔ inscricoes fecham 30 min antes do 1o encontro: 18h29 aceita, 18h30 inclusive recusa (14.2245ms)\n  ✔ em_andamento e encerrada tambem recusam com INSCRICOES_ENCERRADAS (9.6021ms)\n  ✔ encontro sobreposto com confirmada devolve 409 CONFLITO_DE_HORARIO (7.5699ms)\n  ✔ encontro que apenas encosta (fim de um = inicio do outro) nao conflita (6.7588ms)\n  ✔ so colide com em_espera nao bloqueia: inscricao nova em horario do em_espera vira confirmada (6.7818ms)\n  ✔ colisao só no 2o encontro de atividade multiencontro devolve conflito (9.7771ms)\n  ✔ 4o minicurso com vaga quando ja ocupa 3 devolve 422 LIMITE_DE_MINICURSOS (18.1985ms)\n  ✔ 4o minicurso sem vaga nao e recusado no limite: nasce em_espera (10.061ms)\n  ✔ 4o palestra com vaga nao conta para o limite de minicursos (7.2835ms)\n  ✔ com 1 dos 3 minicursos cancelado, o 4o com vaga nasce confirmada (10.3735ms)\n  ✔ atividade cancelada vence encerrada na ordem da regra R6 (4.8368ms)\n  ✔ encerrada vence ja_inscrito: ja ativo em atividade fechada recusa com INSCRICOES_ENCERRADAS (4.6156ms)\n✔ F3 — fechamento e recusas do POST (173.4483ms)\nℹ tests 13\nℹ suites 1\nℹ pass 13\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 373.2793\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "node --test test/inscricoes-f3.test.js",
+      "time": {
+       "start": 1789682563862,
+       "end": 1789682564562
+      }
+     },
+     "id": "prt_0b164ba74001uCtA3NzLz5RJqC",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164b3a9001bKusM9RfF1PRoM"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 54272,
+      "input": 7283,
+      "output": 141,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 46848
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b164bf0a001Jp0fqRYk3RAjS8",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164b3a9001bKusM9RfF1PRoM"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 55049,
+     "input": 768,
+     "output": 265,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 54016
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682565496,
+     "completed": 1789682572079
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b164c178001QaYV46zlzLbcIr",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-start",
+     "id": "prt_0b164c7770016LkJuvS1D5HNFk",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164c178001QaYV46zlzLbcIr"
+    },
+    {
+     "type": "reasoning",
+     "text": "The file passes when run alone. The failure in the full run was likely a timing/port issue — many test files each start their own server on port 0 (ephemeral). Actually wait, node --test runs test files in parallel processes by default? In Node 22, `node --test` runs test files as separate child processes in parallel by default (concurrency = number of CPUs). Each file has its own process and own server on port 0, so ports shouldn't conflict.\n\nBut the failure message was `✖ test\\inscricoes-f3.test.js (1243.7059ms) 'test failed'` with no detail — a file-level failure. This could be a transient crash. Perhaps a resource/timing issue because the process could not keep up. Let me re-run the full suite to see if it's reproducible.",
+     "time": {
+      "start": 1789682567055,
+      "end": 1789682567661
+     },
+     "id": "prt_0b164c78f001rXqiBYjQ9RTbXb",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164c178001QaYV46zlzLbcIr"
+    },
+    {
+     "type": "text",
+     "text": "File passes alone. Let me re-run the full suite to check whether the failure is transient.",
+     "time": {
+      "start": 1789682567665,
+      "end": 1789682568009
+     },
+     "id": "prt_0b164c9f1001tlbMWSXbfZ2Ofh",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164c178001QaYV46zlzLbcIr"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_093ca3215d0541ceb9222acd",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "npm test",
+       "workdir": "C:\\semana-academica\\api"
+      },
+      "output": "\n> semana-academica-api@0.1.0 test\n> node --test test/*.test.js\n\n▶ Contrato — Atividade sem o campo interno cancelada\n  ✔ POST /atividades responde Atividade com exatamente os campos do contrato (105.3848ms)\n  ✔ GET /atividades/:id responde Atividade com exatamente os campos do contrato (12.3861ms)\n  ✔ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (19.0393ms)\n✔ Contrato — Atividade sem o campo interno cancelada (148.3798ms)\n▶ F2 — validações da criação\n  ✔ recusa quantidade de encontros fora do limite por tipo (107.0116ms)\n  ✔ recusa encontro fora da janela ou atravessando a meia-noite, mas aceita qualquer horário (33.0027ms)\n  ✔ recusa encontros da mesma atividade que se sobrepõem ou se tocam (14.2778ms)\n  ✔ recusa encontro com duração fora de 1h a 4h inclusive (21.867ms)\n  ✔ recusa vagas 0, negativa ou fracionária como DADOS_INVALIDOS (9.9737ms)\n  ✔ prioriza QUANTIDADE_DE_ENCONTROS sobre ENCONTRO_INVALIDO (3.7327ms)\n✔ F2 — validações da criação (201.2366ms)\n▶ F3 — vagas e conflito de sala\n  ✔ recusa vagas acima da capacidade da sala e aceita lotar até a capacidade (123.5639ms)\n  ✔ recusa outra atividade na mesma sala a menos de 15 min do fim de um encontro (24.5703ms)\n  ✔ cancelar atividade libera a sala para outra atividade no mesmo horário (11.217ms)\n  ✔ PATCH elevando vagas além da capacidade devolve 422 VAGAS_ACIMA_DA_CAPACIDADE (16.451ms)\n  ✔ prioriza ENCONTRO_INVALIDO sobre VAGAS_ACIMA_DA_CAPACIDADE e esta sobre CONFLITO_DE_SALA (10.3717ms)\n✔ F3 — vagas e conflito de sala (198.9721ms)\n▶ F4 — alterar atividade\n  ✔ PATCH aceita só titulo e vagas; tipo/salaId/encontros/campo fora devolvem CAMPO_NAO_EDITAVEL (182.3144ms)\n  ✔ PATCH com o 1º encontro já começado pelo relógio devolve 422 CAMPO_NAO_EDITAVEL (21.007ms)\n  ✔ PATCH em atividade cancelada devolve ATIVIDADE_CANCELADA, vencendo CAMPO_NAO_EDITAVEL (23.3784ms)\n  ✔ prioriza CAMPO_NAO_EDITAVEL sobre VAGAS_ACIMA_DA_CAPACIDADE no PATCH (6.326ms)\n  ✔ PATCH não muda sala nem encontros, e os ids enc_ continuam os mesmos (8.9362ms)\n  ✔ titulo aceita string vazia, um caractere e duplicado; PATCH também (22.2116ms)\n✔ F4 — alterar atividade (278.9187ms)\n▶ F5 — cancelamento e situação\n  ✔ só se cancela antes do início; no instante exato ou depois é ATIVIDADE_JA_INICIADA (226.278ms)\n  ✔ cancelar de novo uma atividade cancelada devolve 422 ATIVIDADE_CANCELADA (7.9307ms)\n  ✔ relógio no início do 1º encontro mostra em_andamento; 1 min antes, prevista (31.2624ms)\n  ✔ relógio no fim do último encontro mostra encerrada; 1 min antes, em_andamento (9.4925ms)\n  ✔ cancelada prevalece sobre o relógio e a leitura devolve 200 com situacao cancelada (63.564ms)\n  ✔ atividade cancelada não pode ser alterada nem cancelada de novo, e mantém os calculados (14.1692ms)\n✔ F5 — cancelamento e situação (366.7281ms)\n▶ F6 — listagem e filtros\n  ✔ listagem ordena pelo início do 1º encontro, desempatando por titulo (226.9914ms)\n  ✔ atividade cancelada continua na listagem e aparece no filtro de dia (51.0481ms)\n  ✔ ?dia retorna quem tem encontro naquele dia do fuso de Brasília (16.7765ms)\n  ✔ ?dia e ?tipo combinam em AND (8.0669ms)\n  ✔ filtro com valor inválido devolve 422 DADOS_INVALIDOS (3.6413ms)\n✔ F6 — listagem e filtros (322.1534ms)\n▶ F1 — criar e ler atividade\n  ✔ POST /atividades com org-ana e corpo válido devolve 201 com a Atividade (134.045ms)\n  ✔ POST /atividades devolve ocupadas 0, vagasRestantes igual a vagas e emEspera 0 (7.3245ms)\n  ✔ POST ignorando cargaHorariaMinutos enviado no corpo e devolvendo a soma (18.0501ms)\n  ✔ POST soma 90+75 minutos em 165, sem arredondamento (6.0739ms)\n  ✔ POST /atividades com participante devolve 403 SOMENTE_ORGANIZACAO (5.9831ms)\n  ✔ GET /atividades com participante devolve 200 com a atividade criada (9.7707ms)\n  ✔ GET /atividades/:id com org-ana devolve 200 com a atividade criada (6.9573ms)\n  ✔ GET /atividades/:id em id inexistente devolve 404 NAO_ENCONTRADO (13.6585ms)\n  ✔ POST /atividades sem titulo devolve 422 DADOS_INVALIDOS (12.0571ms)\n  ✔ POST /atividades com tipo \"oficina\" devolve 422 DADOS_INVALIDOS (3.8788ms)\n  ✔ POST /atividades com salaId inexistente devolve 404 NAO_ENCONTRADO (3.9425ms)\n  ✔ POST /_teste/reset apaga a atividade criada e devolve os dados iniciais intactos (12.841ms)\n✔ F1 — criar e ler atividade (250.9758ms)\n▶ F1 — criar, ler e listar inscrição\n  ✔ POST /atividades/:id/inscricoes com vaga devolve 201 com Inscricao confirmada completa (117.8201ms)\n  ✔ POST /atividades/:id/inscricoes com organizacao devolve 403 SOMENTE_PARTICIPANTE mesmo em atividade inexistente (11.7744ms)\n  ✔ POST /atividades/:id/inscricoes em atividade inexistente devolve 404 NAO_ENCONTRADO (6.2584ms)\n  ✔ segunda inscricao da mesma pessoa na mesma atividade devolve 409 JA_INSCRITO (27.6242ms)\n  ✔ GET /inscricoes com participante devolve so as proprias e com filtro atividadeId (49.2643ms)\n  ✔ GET /inscricoes/:id de outro participante devolve 200 com a inscricao alheia (31.5704ms)\n  ✔ cancelar ou confirmar inscricao de outro participante devolve 404 NAO_ENCONTRADO (12.0893ms)\n  ✔ GET /inscricoes/:id inexistente devolve 404 NAO_ENCONTRADO (7.1317ms)\n  ✔ organizacao nas tres escritas de M2 devolve 403 SOMENTE_PARTICIPANTE (23.1319ms)\n✔ F1 — criar, ler e listar inscrição (305.1055ms)\n▶ F2 — lista de espera\n  ✔ inscricao sem vaga nasce em_espera com posicaoNaEspera em ordem de chegada (153.1564ms)\n  ✔ cancelar em_espera tira da fila e reindexa os demais, no mesmo instante criado (19.3421ms)\n  ✔ quem cancelou pode se reinscrever e entra no fim da fila (27.1545ms)\n✔ F2 — lista de espera (212.2196ms)\n▶ F3 — fechamento e recusas do POST\n  ✔ inscrever em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (116.181ms)\n  ✔ inscricoes fecham 30 min antes do 1o encontro: 18h29 aceita, 18h30 inclusive recusa (43.1932ms)\n  ✔ em_andamento e encerrada tambem recusam com INSCRICOES_ENCERRADAS (15.9529ms)\n  ✔ encontro sobreposto com confirmada devolve 409 CONFLITO_DE_HORARIO (16.7197ms)\n  ✔ encontro que apenas encosta (fim de um = inicio do outro) nao conflita (10.5558ms)\n  ✔ so colide com em_espera nao bloqueia: inscricao nova em horario do em_espera vira confirmada (9.4903ms)\n  ✔ colisao só no 2o encontro de atividade multiencontro devolve conflito (20.8924ms)\n  ✔ 4o minicurso com vaga quando ja ocupa 3 devolve 422 LIMITE_DE_MINICURSOS (22.8681ms)\n  ✔ 4o minicurso sem vaga nao e recusado no limite: nasce em_espera (14.1386ms)\n  ✔ 4o palestra com vaga nao conta para o limite de minicursos (14.762ms)\n  ✔ com 1 dos 3 minicursos cancelado, o 4o com vaga nasce confirmada (29.5923ms)\n  ✔ atividade cancelada vence encerrada na ordem da regra R6 (19.8193ms)\n  ✔ encerrada vence ja_inscrito: ja ativo em atividade fechada recusa com INSCRICOES_ENCERRADAS (15.5439ms)\n✔ F3 — fechamento e recusas do POST (364.7828ms)\n▶ F4 — convocacao e expiracao\n  ✔ cancelar confirmada libera vaga e o 1o da fila ja aparece convocado sem outro acesso (138.6277ms)\n  ✔ PATCH aumentando vagas libera vaga e promove o 1o da fila (89.5057ms)\n  ✔ convocadaAte nunca passa do fechamento das inscricoes (36.0949ms)\n  ✔ convocacao vencida expira em cascata e o praco do proximo conta do vencimento anterior (24.3106ms)\n  ✔ expirada pode se reinscrever e entra no fim da fila (20.4124ms)\n✔ F4 — convocacao e expiracao (320.8491ms)\n▶ F5 — confirmacao\n  ✔ confirmar convocada no prazo devolve 200 com confirmada e campos null (205.5593ms)\n  ✔ confirmar em_espera devolve 422 SEM_CONVOCACAO (13.9985ms)\n  ✔ confirmar convocada vencida devolve 422 CONVOCACAO_EXPIRADA (17.4501ms)\n  ✔ confirmar exatamente em convocadaAte e aceito (prazo ate X inclui X) (18.3899ms)\n  ✔ conflito criado depois recusa a confirmacao com 409 e a convocacao continua valida (19.7121ms)\n  ✔ confirmar o 4o minicurso devolve 422 LIMITE_DE_MINICURSOS e segue convocada (75.2095ms)\n  ✔ convocada vencida com conflito recusa CONVOCACAO_EXPIRADA, 1a condicao da ordem (19.4861ms)\n  ✔ convocada com novo conflito E 4o minicurso recusa CONFLITO_DE_HORARIO, antes do limite (21.293ms)\n✔ F5 — confirmacao (404.8223ms)\n▶ F6 — cancelamento proprio\n  ✔ 1 minuto antes do inicio o cancelamento devolve 200 (174.9571ms)\n  ✔ no instante exato do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (41.896ms)\n  ✔ depois do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (27.8068ms)\n  ✔ cancelar inscricao cancelada devolve 422 INSCRICAO_INATIVA (15.1134ms)\n  ✔ cancelar inscricao expirada devolve 422 INSCRICAO_INATIVA (18.9693ms)\n  ✔ inscricao cancelada em atividade ja iniciada devolve ATIVIDADE_JA_INICIADA (prioridade) (10.0495ms)\n  ✔ cancelar convocada libera vaga e promove o proximo da fila (13.0551ms)\n✔ F6 — cancelamento proprio (316.6386ms)\n▶ F7 — atividade cancelada e campos do M1\n  ✔ cancelar atividade transforma todas as ativas em cancelada e nao promove ninguem (206.7533ms)\n  ✔ GET /atividades/:id mostra ocupadas, emEspera e vagasRestantes calculados (25.4172ms)\n  ✔ PATCH reduzindo vagas abaixo dos ocupantes devolve 409 VAGAS_ABAIXO_DOS_INSCRITOS (20.2151ms)\n  ✔ com atividade cancelada os campos continuam calculados: ocupadas 0 e emEspera 0 (17.2664ms)\n✔ F7 — atividade cancelada e campos do M1 (288.9978ms)\n▶ F4 — rotas de teste ativas com MODO_TESTE=1\n  ✔ PUT /_teste/relogio com {agora} responde 200 com o valor recebido (208.0782ms)\n  ✔ PUT /_teste/relogio com corpo não-JSON devolve 422 DADOS_INVALIDOS (7.9997ms)\n  ✔ GET /_teste/relogio retorna o último horário definido por PUT e fica parado (68.384ms)\n  ✔ POST /_teste/reset zera o relógio em 09:00 e mantém as 4 salas (8.7064ms)\n✔ F4 — rotas de teste ativas com MODO_TESTE=1 (324.4586ms)\n▶ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404\n  ✔ GET, POST e PUT em /_teste/* devolvem 404 (75.6434ms)\n✔ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404 (79.3503ms)\n▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (180.6194ms)\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (32.9677ms)\n  ✔ atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18) (20.7339ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (252.7355ms)\n▶ F1 — Emitir o código do encontro\n  ✔ participante em GET /encontros/:id/codigo recebe 403 SOMENTE_ORGANIZACAO (270.662ms)\n  ✔ GET /encontros/:id/codigo em encontro inexistente devolve 404 NAO_ENCONTRADO (12.7198ms)\n  ✔ GET /encontros/:id/codigo em 18:45:00 (inicio - 15 min) devolve 200 com o CodigoDoEncontro (29.5271ms)\n  ✔ GET /encontros/:id/codigo em 18:44:59 devolve 422 FORA_DA_JANELA (21.2527ms)\n  ✔ GET /encontros/:id/codigo em 19:30:00 (inicio + 30 min) devolve 200 (8.8051ms)\n  ✔ GET /encontros/:id/codigo em 19:30:01 devolve 422 FORA_DA_JANELA (7.8197ms)\n  ✔ código das 19:03 tem 6 caracteres do alfabeto, trocaEm 19:04:00 e validoAte 19:05:00 (12.0619ms)\n  ✔ dois GET /encontros/:id/codigo no mesmo minuto devolvem o mesmo código, trocaEm e validoAte (52.8171ms)\n  ✔ ao cruzar o minuto o código gira e trocaEm aponta o próximo hh:mm:00 (18.9685ms)\n  ✔ GET /encontros/:id/codigo em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (63.1347ms)\n  ✔ atividade cancelada fora da janela devolve ATIVIDADE_CANCELADA antes de FORA_DA_JANELA (15.7486ms)\n  ✔ PATCH de título/vagas não muda o código nem a validade no mesmo minuto (10.0715ms)\n  ✔ dois encontros no mesmo minuto têm códigos diferentes (o código é do encontro, não do minuto) (13.9658ms)\n✔ F1 — Emitir o código do encontro (549.4269ms)\n▶ F2 — Presença QR online\n  ✔ organização em POST /encontros/:id/presencas recebe 403 SOMENTE_PARTICIPANTE mesmo em encontro inexistente (137.0909ms)\n  ✔ POST /encontros/:id/presencas em encontro inexistente devolve 404 NAO_ENCONTRADO (7.4775ms)\n  ✔ encontro inexistente com corpo inválido devolve 404 (existência antes do corpo) (19.6565ms)\n  ✔ POST sem codigo no corpo devolve 422 DADOS_INVALIDOS (15.0798ms)\n  ✔ POST com codigo de tipo errado devolve 422 DADOS_INVALIDOS (11.2045ms)\n  ✔ primeira presença devolve 201 com Presenca qr completa no instante do envio (27.8896ms)\n  ✔ repetir o POST devolve 200 com a mesma presença, mesmo id e mesmos instantes (26.2197ms)\n  ✔ POST sem inscrição na atividade devolve 403 NAO_INSCRITO (12.3917ms)\n  ✔ POST com inscrição em_espera devolve 403 NAO_INSCRITO (24.1692ms)\n  ✔ aceita presença em 18:45:00 (inicio - 15 min, borda da abertura) (26.6483ms)\n  ✔ recusa presença em 18:44:59 (inicio - 15 min - 1 s, fora da janela) (17.1657ms)\n  ✔ aceita presença em 19:30:00 (inicio + 30 min, borda do fechamento) (37.6718ms)\n  ✔ recusa presença em 19:30:01 (inicio + 30 min + 1 s, fora da janela) (11.8816ms)\n  ✔ aceita código emitido às 19:03 enviado às 19:04:59 (minuto anterior) (47.6755ms)\n  ✔ recusa código emitido às 19:03 enviado às 19:05:00 (validoAte) (13.123ms)\n  ✔ aceita código em minúscula (20.1667ms)\n  ✔ aceita código com espaço (18.7255ms)\n  ✔ recusa código com caractere fora do alfabeto com 422 CODIGO_INVALIDO (7.9679ms)\n  ✔ recusa código emitido para outro encontro com 422 CODIGO_INVALIDO (16.6692ms)\n  ✔ presença existente fora da janela devolve 200 com a mesma presença (R11 antes de R1) (17.2318ms)\n  ✔ presença existente com código errado devolve 200 com a mesma presença (R11 antes de R6/R7) (24.6922ms)\n  ✔ não inscrito, fora da janela e código válido devolve 403 NAO_INSCRITO (R8 antes de R1) (11.228ms)\n  ✔ fora da janela com código errado devolve 422 FORA_DA_JANELA (R1 antes de R6/R7) (16.3801ms)\n✔ F2 — Presença QR online (583.683ms)\n▶ F3 — Presença offline (lidoEm)\n  ✔ envio às 20:00 com lidoEm 19:10:30 devolve 201 com origem qr_offline, lidoEm e registradaEm 20:00 (R10, R12) (196.0362ms)\n  ✔ envio às 00:00:01 (fim + 2 h + 1 s) devolve 422 SINCRONIZACAO_TARDIA (R9) (28.7885ms)\n  ✔ envio às 00:00:00 (fim + 2 h, borda) com lidoEm 19:10:30 devolve 201 (R9) (32.1681ms)\n  ✔ lidoEm 18:44:59 com envio dentro da janela devolve 422 FORA_DA_JANELA (R12) (29.7732ms)\n  ✔ lidoEm 19:30:01 com envio depois do fechamento devolve 422 FORA_DA_JANELA (R12) (16.3771ms)\n  ✔ lidoEm no futuro não é erro: devolve 201 e grava o instante do envio como lidoEm (R12) (16.5807ms)\n  ✔ lidoEm que não é string ISO válida devolve 422 DADOS_INVALIDOS (12.3312ms)\n  ✔ lidoEm de tipo errado devolve 422 DADOS_INVALIDOS (9.3387ms)\n  ✔ reenvio do mesmo lidoEm devolve 200 com o mesmo id e a mesma presença (R11) (16.617ms)\n  ✔ código errado com envio tardio devolve 422 SINCRONIZACAO_TARDIA, antes de CODIGO_INVALIDO (R16) (15.9858ms)\n  ✔ não inscrito com envio tardio devolve 403 NAO_INSCRITO, antes de SINCRONIZACAO_TARDIA (R16) (12.4056ms)\n  ✔ atividade cancelada antes do envio: presença lida antes do cancelamento devolve 403 NAO_INSCRITO (R18) (17.6624ms)\n  ✔ atividade cancelada depois da presença registrada: reenvio devolve 200 com a mesma presença (R18) (21.1039ms)\n✔ F3 — Presença offline (lidoEm) (436.5966ms)\n▶ F4 — Presença manual\n  ✔ manual válida às 20:00 por org-ana para p-carla confirmada devolve 201 com origem manual e justificativa gravada (R10, R15) (166.4733ms)\n  ✔ manual aceita em 18:45:00 (inicio − 15 min, borda da abertura da janela manual) (16.5833ms)\n  ✔ manual recusada em 18:44:59 (inicio − 15 min − 1 s) com 422 FORA_DA_JANELA (13.3455ms)\n  ✔ manual aceita às 00:00:00 de 20/10 (fim + 2 h, borda do fechamento da janela manual) (11.1394ms)\n  ✔ manual recusada às 00:00:01 de 20/10 (fim + 2 h + 1 s) com 422 FORA_DA_JANELA (22.0969ms)\n  ✔ manual sem justificativa devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (16.2557ms)\n  ✔ manual com justificativa vazia devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (29.0965ms)\n  ✔ manual com justificativa só de espaços devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (18.0755ms)\n  ✔ manual com justificativa de 3 caracteres devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (22.817ms)\n  ✔ manual com justificativa de tipo errado devolve 422 DADOS_INVALIDOS (R13) (13.0085ms)\n  ✔ manual sem participanteId devolve 422 DADOS_INVALIDOS (16.6151ms)\n  ✔ manual para participante em_espera devolve 403 NAO_INSCRITO (R8) (11.8685ms)\n  ✔ manual para participanteId desconhecido devolve 403 NAO_INSCRITO (R8) (6.805ms)\n  ✔ com 5 confirmadas, a 1ª manual devolve 201 e a 2ª (para outro participante) devolve 422 LIMITE_DE_MANUAIS (R14) (29.524ms)\n  ✔ com 1 confirmada, a 1ª manual ainda devolve 201 (10% arredondando para cima, R14) (12.7652ms)\n  ✔ manual repetida para quem já tem presença QR devolve 200 com a mesma presença (R11 antes de R8/R15) (28.8033ms)\n  ✔ manual repetida para quem já tem presença manual devolve 200 com a mesma presença, antes do limite (R17) (14.7812ms)\n  ✔ em_espera com justificativa curta devolve 422 JUSTIFICATIVA_OBRIGATORIA, antes de NAO_INSCRITO (R17) (14.2634ms)\n  ✔ limite atingido e fora da janela devolve 422 FORA_DA_JANELA, antes de LIMITE_DE_MANUAIS (R17) (21.2149ms)\n  ✔ participante em POST /encontros/:id/presencas/manual devolve 403 SOMENTE_ORGANIZACAO (R22) (6.3239ms)\n  ✔ quem já tem presença manual, com justificativa curta, recebe 422 JUSTIFICATIVA_OBRIGATORIA — justificativa vem antes da presença existente (R17) (11.2893ms)\n✔ F4 — Presença manual (515.0013ms)\n▶ F5 — Lista de presenças\n  ✔ GET sem nenhuma presença registrada devolve 200 com lista vazia (R19) (185.611ms)\n  ✔ p-carla QR 19:03:45 e p-diego manual 20:00 → lista com 2, p-carla antes de p-diego, com os campos do contrato (R19) (47.2655ms)\n  ✔ duas presenças com o mesmo registradaEm ficam em ordem crescente por id (R19) (40.3945ms)\n  ✔ presença registrada às 18:47 continua na lista após cancelar a atividade às 18:50 (R24) (20.9323ms)\n  ✔ participante em GET /encontros/:id/presencas devolve 403 SOMENTE_ORGANIZACAO (R22) (8.0779ms)\n  ✔ GET de encontro inexistente devolve 404 NAO_ENCONTRADO (R22) (6.8577ms)\n  ✔ DELETE e PATCH de presença devolvem 404 NAO_ENCONTRADO em JSON — não há rota de edição nem apagamento (R20) (16.2291ms)\n  ✔ POST /encontros/:id/saidas devolve 404 NAO_ENCONTRADO em JSON — não há rota de saída (R21) (8.8453ms)\n✔ F5 — Lista de presenças (351.9098ms)\n▶ F3 — dados iniciais e GET /salas\n  ✔ GET /salas com X-Usuario: p-carla retorna 200 com as 4 salas iniciais (58.0432ms)\n  ✔ GET /salas sem X-Usuario devolve 401 USUARIO_DESCONHECIDO (5.7098ms)\n  ✔ GET /salas com X-Usuario inexistente devolve 401 USUARIO_DESCONHECIDO (4.7165ms)\n✔ F3 — dados iniciais e GET /salas (79.9471ms)\nℹ tests 181\nℹ suites 23\nℹ pass 181\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2753.0024\n",
+      "metadata": {
+       "output": "\n> semana-academica-api@0.1.0 test\n> node --test test/*.test.js\n\n▶ Contrato — Atividade sem o campo interno cancelada\n  ✔ POST /atividades responde Atividade com exatamente os campos do contrato (105.3848ms)\n  ✔ GET /atividades/:id responde Atividade com exatamente os campos do contrato (12.3861ms)\n  ✔ POST /atividades/:id/cancelamento responde Atividade com exatamente os campos do contrato (19.0393ms)\n✔ Contrato — Atividade sem o campo interno cancelada (148.3798ms)\n▶ F2 — validações da criação\n  ✔ recusa quantidade de encontros fora do limite por tipo (107.0116ms)\n  ✔ recusa encontro fora da janela ou atravessando a meia-noite, mas aceita qualquer horário (33.0027ms)\n  ✔ recusa encontros da mesma atividade que se sobrepõem ou se tocam (14.2778ms)\n  ✔ recusa encontro com duração fora de 1h a 4h inclusive (21.867ms)\n  ✔ recusa vagas 0, negativa ou fracionária como DADOS_INVALIDOS (9.9737ms)\n  ✔ prioriza QUANTIDADE_DE_ENCONTROS sobre ENCONTRO_INVALIDO (3.7327ms)\n✔ F2 — validações da criação (201.2366ms)\n▶ F3 — vagas e conflito de sala\n  ✔ recusa vagas acima da capacidade da sala e aceita lotar até a capacidade (123.5639ms)\n  ✔ recusa outra atividade na mesma sala a menos de 15 min do fim de um encontro (24.5703ms)\n  ✔ cancelar atividade libera a sala para outra atividade no mesmo horário (11.217ms)\n  ✔ PATCH elevando vagas além da capacidade devolve 422 VAGAS_ACIMA_DA_CAPACIDADE (16.451ms)\n  ✔ prioriza ENCONTRO_INVALIDO sobre VAGAS_ACIMA_DA_CAPACIDADE e esta sobre CONFLITO_DE_SALA (10.3717ms)\n✔ F3 — vagas e conflito de sala (198.9721ms)\n▶ F4 — alterar atividade\n  ✔ PATCH aceita só titulo e vagas; tipo/salaId/encontros/campo fora devolvem CAMPO_NAO_EDITAVEL (182.3144ms)\n  ✔ PATCH com o 1º encontro já começado pelo relógio devolve 422 CAMPO_NAO_EDITAVEL (21.007ms)\n  ✔ PATCH em atividade cancelada devolve ATIVIDADE_CANCELADA, vencendo CAMPO_NAO_EDITAVEL (23.3784ms)\n  ✔ prioriza CAMPO_NAO_EDITAVEL sobre VAGAS_ACIMA_DA_CAPACIDADE no PATCH (6.326ms)\n  ✔ PATCH não muda sala nem encontros, e os ids enc_ continuam os mesmos (8.9362ms)\n  ✔ titulo aceita string vazia, um caractere e duplicado; PATCH também (22.2116ms)\n✔ F4 — alterar atividade (278.9187ms)\n▶ F5 — cancelamento e situação\n  ✔ só se cancela antes do início; no instante exato ou depois é ATIVIDADE_JA_INICIADA (226.278ms)\n  ✔ cancelar de novo uma atividade cancelada devolve 422 ATIVIDADE_CANCELADA (7.9307ms)\n  ✔ relógio no início do 1º encontro mostra em_andamento; 1 min antes, prevista (31.2624ms)\n  ✔ relógio no fim do último encontro mostra encerrada; 1 min antes, em_andamento (9.4925ms)\n  ✔ cancelada prevalece sobre o relógio e a leitura devolve 200 com situacao cancelada (63.564ms)\n  ✔ atividade cancelada não pode ser alterada nem cancelada de novo, e mantém os calculados (14.1692ms)\n✔ F5 — cancelamento e situação (366.7281ms)\n▶ F6 — listagem e filtros\n  ✔ listagem ordena pelo início do 1º encontro, desempatando por titulo (226.9914ms)\n  ✔ atividade cancelada continua na listagem e aparece no filtro de dia (51.0481ms)\n  ✔ ?dia retorna quem tem encontro naquele dia do fuso de Brasília (16.7765ms)\n  ✔ ?dia e ?tipo combinam em AND (8.0669ms)\n  ✔ filtro com valor inválido devolve 422 DADOS_INVALIDOS (3.6413ms)\n✔ F6 — listagem e filtros (322.1534ms)\n▶ F1 — criar e ler atividade\n  ✔ POST /atividades com org-ana e corpo válido devolve 201 com a Atividade (134.045ms)\n  ✔ POST /atividades devolve ocupadas 0, vagasRestantes igual a vagas e emEspera 0 (7.3245ms)\n  ✔ POST ignorando cargaHorariaMinutos enviado no corpo e devolvendo a soma (18.0501ms)\n  ✔ POST soma 90+75 minutos em 165, sem arredondamento (6.0739ms)\n  ✔ POST /atividades com participante devolve 403 SOMENTE_ORGANIZACAO (5.9831ms)\n  ✔ GET /atividades com participante devolve 200 com a atividade criada (9.7707ms)\n  ✔ GET /atividades/:id com org-ana devolve 200 com a atividade criada (6.9573ms)\n  ✔ GET /atividades/:id em id inexistente devolve 404 NAO_ENCONTRADO (13.6585ms)\n  ✔ POST /atividades sem titulo devolve 422 DADOS_INVALIDOS (12.0571ms)\n  ✔ POST /atividades com tipo \"oficina\" devolve 422 DADOS_INVALIDOS (3.8788ms)\n  ✔ POST /atividades com salaId inexistente devolve 404 NAO_ENCONTRADO (3.9425ms)\n  ✔ POST /_teste/reset apaga a atividade criada e devolve os dados iniciais intactos (12.841ms)\n✔ F1 — criar e ler atividade (250.9758ms)\n▶ F1 — criar, ler e listar inscrição\n  ✔ POST /atividades/:id/inscricoes com vaga devolve 201 com Inscricao confirmada completa (117.8201ms)\n  ✔ POST /atividades/:id/inscricoes com organizacao devolve 403 SOMENTE_PARTICIPANTE mesmo em atividade inexistente (11.7744ms)\n  ✔ POST /atividades/:id/inscricoes em atividade inexistente devolve 404 NAO_ENCONTRADO (6.2584ms)\n  ✔ segunda inscricao da mesma pessoa na mesma atividade devolve 409 JA_INSCRITO (27.6242ms)\n  ✔ GET /inscricoes com participante devolve so as proprias e com filtro atividadeId (49.2643ms)\n  ✔ GET /inscricoes/:id de outro participante devolve 200 com a inscricao alheia (31.5704ms)\n  ✔ cancelar ou confirmar inscricao de outro participante devolve 404 NAO_ENCONTRADO (12.0893ms)\n  ✔ GET /inscricoes/:id inexistente devolve 404 NAO_ENCONTRADO (7.1317ms)\n  ✔ organizacao nas tres escritas de M2 devolve 403 SOMENTE_PARTICIPANTE (23.1319ms)\n✔ F1 — criar, ler e listar inscrição (305.1055ms)\n▶ F2 — lista de espera\n  ✔ inscricao sem vaga nasce em_espera com posicaoNaEspera em ordem de chegada (153.1564ms)\n  ✔ cancelar em_espera tira da fila e reindexa os demais, no mesmo instante criado (19.3421ms)\n  ✔ quem cancelou pode se reinscrever e entra no fim da fila (27.1545ms)\n✔ F2 — lista de espera (212.2196ms)\n▶ F3 — fechamento e recusas do POST\n  ✔ inscrever em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (116.181ms)\n  ✔ inscricoes fecham 30 min antes do 1o encontro: 18h29 aceita, 18h30 inclusive recusa (43.1932ms)\n  ✔ em_andamento e encerrada tambem recusam com INSCRICOES_ENCERRADAS (15.9529ms)\n  ✔ encontro sobreposto com confirmada devolve 409 CONFLITO_DE_HORARIO (16.7197ms)\n  ✔ encontro que apenas encosta (fim de um = inicio do outro) nao conflita (10.5558ms)\n  ✔ so colide com em_espera nao bloqueia: inscricao nova em horario do em_espera vira confirmada (9.4903ms)\n  ✔ colisao só no 2o encontro de atividade multiencontro devolve conflito (20.8924ms)\n  ✔ 4o minicurso com vaga quando ja ocupa 3 devolve 422 LIMITE_DE_MINICURSOS (22.8681ms)\n  ✔ 4o minicurso sem vaga nao e recusado no limite: nasce em_espera (14.1386ms)\n  ✔ 4o palestra com vaga nao conta para o limite de minicursos (14.762ms)\n  ✔ com 1 dos 3 minicursos cancelado, o 4o com vaga nasce confirmada (29.5923ms)\n  ✔ atividade cancelada vence encerrada na ordem da regra R6 (19.8193ms)\n  ✔ encerrada vence ja_inscrito: ja ativo em atividade fechada recusa com INSCRICOES_ENCERRADAS (15.5439ms)\n✔ F3 — fechamento e recusas do POST (364.7828ms)\n▶ F4 — convocacao e expiracao\n  ✔ cancelar confirmada libera vaga e o 1o da fila ja aparece convocado sem outro acesso (138.6277ms)\n  ✔ PATCH aumentando vagas libera vaga e promove o 1o da fila (89.5057ms)\n  ✔ convocadaAte nunca passa do fechamento das inscricoes (36.0949ms)\n  ✔ convocacao vencida expira em cascata e o praco do proximo conta do vencimento anterior (24.3106ms)\n  ✔ expirada pode se reinscrever e entra no fim da fila (20.4124ms)\n✔ F4 — convocacao e expiracao (320.8491ms)\n▶ F5 — confirmacao\n  ✔ confirmar convocada no prazo devolve 200 com confirmada e campos null (205.5593ms)\n  ✔ confirmar em_espera devolve 422 SEM_CONVOCACAO (13.9985ms)\n  ✔ confirmar convocada vencida devolve 422 CONVOCACAO_EXPIRADA (17.4501ms)\n  ✔ confirmar exatamente em convocadaAte e aceito (prazo ate X inclui X) (18.3899ms)\n  ✔ conflito criado depois recusa a confirmacao com 409 e a convocacao continua valida (19.7121ms)\n  ✔ confirmar o 4o minicurso devolve 422 LIMITE_DE_MINICURSOS e segue convocada (75.2095ms)\n  ✔ convocada vencida com conflito recusa CONVOCACAO_EXPIRADA, 1a condicao da ordem (19.4861ms)\n  ✔ convocada com novo conflito E 4o minicurso recusa CONFLITO_DE_HORARIO, antes do limite (21.293ms)\n✔ F5 — confirmacao (404.8223ms)\n▶ F6 — cancelamento proprio\n  ✔ 1 minuto antes do inicio o cancelamento devolve 200 (174.9571ms)\n  ✔ no instante exato do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (41.896ms)\n  ✔ depois do inicio o cancelamento devolve 422 ATIVIDADE_JA_INICIADA (27.8068ms)\n  ✔ cancelar inscricao cancelada devolve 422 INSCRICAO_INATIVA (15.1134ms)\n  ✔ cancelar inscricao expirada devolve 422 INSCRICAO_INATIVA (18.9693ms)\n  ✔ inscricao cancelada em atividade ja iniciada devolve ATIVIDADE_JA_INICIADA (prioridade) (10.0495ms)\n  ✔ cancelar convocada libera vaga e promove o proximo da fila (13.0551ms)\n✔ F6 — cancelamento proprio (316.6386ms)\n▶ F7 — atividade cancelada e campos do M1\n  ✔ cancelar atividade transforma todas as ativas em cancelada e nao promove ninguem (206.7533ms)\n  ✔ GET /atividades/:id mostra ocupadas, emEspera e vagasRestantes calculados (25.4172ms)\n  ✔ PATCH reduzindo vagas abaixo dos ocupantes devolve 409 VAGAS_ABAIXO_DOS_INSCRITOS (20.2151ms)\n  ✔ com atividade cancelada os campos continuam calculados: ocupadas 0 e emEspera 0 (17.2664ms)\n✔ F7 — atividade cancelada e campos do M1 (288.9978ms)\n▶ F4 — rotas de teste ativas com MODO_TESTE=1\n  ✔ PUT /_teste/relogio com {agora} responde 200 com o valor recebido (208.0782ms)\n  ✔ PUT /_teste/relogio com corpo não-JSON devolve 422 DADOS_INVALIDOS (7.9997ms)\n  ✔ GET /_teste/relogio retorna o último horário definido por PUT e fica parado (68.384ms)\n  ✔ POST /_teste/reset zera o relógio em 09:00 e mantém as 4 salas (8.7064ms)\n✔ F4 — rotas de teste ativas com MODO_TESTE=1 (324.4586ms)\n▶ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404\n  ✔ GET, POST e PUT em /_teste/* devolvem 404 (75.6434ms)\n✔ F4 — sem MODO_TESTE=1 as rotas /_teste respondem 404 (79.3503ms)\n▶ Auditoria M3 — lacunas do parecer 2026-09-17\n  ✔ inscrição cancelada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (180.6194ms)\n  ✔ inscrição expirada: POST /encontros/:id/presencas com código válido devolve 403 NAO_INSCRITO (R8) (32.9677ms)\n  ✔ atividade cancelada: manual para quem já tem presença devolve 200 com a mesma presença e para quem não tem devolve 403 NAO_INSCRITO (R18) (20.7339ms)\n✔ Auditoria M3 — lacunas do parecer 2026-09-17 (252.7355ms)\n▶ F1 — Emitir o código do encontro\n  ✔ participante em GET /encontros/:id/codigo recebe 403 SOMENTE_ORGANIZACAO (270.662ms)\n  ✔ GET /encontros/:id/codigo em encontro inexistente devolve 404 NAO_ENCONTRADO (12.7198ms)\n  ✔ GET /encontros/:id/codigo em 18:45:00 (inicio - 15 min) devolve 200 com o CodigoDoEncontro (29.5271ms)\n  ✔ GET /encontros/:id/codigo em 18:44:59 devolve 422 FORA_DA_JANELA (21.2527ms)\n  ✔ GET /encontros/:id/codigo em 19:30:00 (inicio + 30 min) devolve 200 (8.8051ms)\n  ✔ GET /encontros/:id/codigo em 19:30:01 devolve 422 FORA_DA_JANELA (7.8197ms)\n  ✔ código das 19:03 tem 6 caracteres do alfabeto, trocaEm 19:04:00 e validoAte 19:05:00 (12.0619ms)\n  ✔ dois GET /encontros/:id/codigo no mesmo minuto devolvem o mesmo código, trocaEm e validoAte (52.8171ms)\n  ✔ ao cruzar o minuto o código gira e trocaEm aponta o próximo hh:mm:00 (18.9685ms)\n  ✔ GET /encontros/:id/codigo em atividade cancelada devolve 422 ATIVIDADE_CANCELADA (63.1347ms)\n  ✔ atividade cancelada fora da janela devolve ATIVIDADE_CANCELADA antes de FORA_DA_JANELA (15.7486ms)\n  ✔ PATCH de título/vagas não muda o código nem a validade no mesmo minuto (10.0715ms)\n  ✔ dois encontros no mesmo minuto têm códigos diferentes (o código é do encontro, não do minuto) (13.9658ms)\n✔ F1 — Emitir o código do encontro (549.4269ms)\n▶ F2 — Presença QR online\n  ✔ organização em POST /encontros/:id/presencas recebe 403 SOMENTE_PARTICIPANTE mesmo em encontro inexistente (137.0909ms)\n  ✔ POST /encontros/:id/presencas em encontro inexistente devolve 404 NAO_ENCONTRADO (7.4775ms)\n  ✔ encontro inexistente com corpo inválido devolve 404 (existência antes do corpo) (19.6565ms)\n  ✔ POST sem codigo no corpo devolve 422 DADOS_INVALIDOS (15.0798ms)\n  ✔ POST com codigo de tipo errado devolve 422 DADOS_INVALIDOS (11.2045ms)\n  ✔ primeira presença devolve 201 com Presenca qr completa no instante do envio (27.8896ms)\n  ✔ repetir o POST devolve 200 com a mesma presença, mesmo id e mesmos instantes (26.2197ms)\n  ✔ POST sem inscrição na atividade devolve 403 NAO_INSCRITO (12.3917ms)\n  ✔ POST com inscrição em_espera devolve 403 NAO_INSCRITO (24.1692ms)\n  ✔ aceita presença em 18:45:00 (inicio - 15 min, borda da abertura) (26.6483ms)\n  ✔ recusa presença em 18:44:59 (inicio - 15 min - 1 s, fora da janela) (17.1657ms)\n  ✔ aceita presença em 19:30:00 (inicio + 30 min, borda do fechamento) (37.6718ms)\n  ✔ recusa presença em 19:30:01 (inicio + 30 min + 1 s, fora da janela) (11.8816ms)\n  ✔ aceita código emitido às 19:03 enviado às 19:04:59 (minuto anterior) (47.6755ms)\n  ✔ recusa código emitido às 19:03 enviado às 19:05:00 (validoAte) (13.123ms)\n  ✔ aceita código em minúscula (20.1667ms)\n  ✔ aceita código com espaço (18.7255ms)\n  ✔ recusa código com caractere fora do alfabeto com 422 CODIGO_INVALIDO (7.9679ms)\n  ✔ recusa código emitido para outro encontro com 422 CODIGO_INVALIDO (16.6692ms)\n  ✔ presença existente fora da janela devolve 200 com a mesma presença (R11 antes de R1) (17.2318ms)\n  ✔ presença existente com código errado devolve 200 com a mesma presença (R11 antes de R6/R7) (24.6922ms)\n  ✔ não inscrito, fora da janela e código válido devolve 403 NAO_INSCRITO (R8 antes de R1) (11.228ms)\n  ✔ fora da janela com código errado devolve 422 FORA_DA_JANELA (R1 antes de R6/R7) (16.3801ms)\n✔ F2 — Presença QR online (583.683ms)\n▶ F3 — Presença offline (lidoEm)\n  ✔ envio às 20:00 com lidoEm 19:10:30 devolve 201 com origem qr_offline, lidoEm e registradaEm 20:00 (R10, R12) (196.0362ms)\n  ✔ envio às 00:00:01 (fim + 2 h + 1 s) devolve 422 SINCRONIZACAO_TARDIA (R9) (28.7885ms)\n  ✔ envio às 00:00:00 (fim + 2 h, borda) com lidoEm 19:10:30 devolve 201 (R9) (32.1681ms)\n  ✔ lidoEm 18:44:59 com envio dentro da janela devolve 422 FORA_DA_JANELA (R12) (29.7732ms)\n  ✔ lidoEm 19:30:01 com envio depois do fechamento devolve 422 FORA_DA_JANELA (R12) (16.3771ms)\n  ✔ lidoEm no futuro não é erro: devolve 201 e grava o instante do envio como lidoEm (R12) (16.5807ms)\n  ✔ lidoEm que não é string ISO válida devolve 422 DADOS_INVALIDOS (12.3312ms)\n  ✔ lidoEm de tipo errado devolve 422 DADOS_INVALIDOS (9.3387ms)\n  ✔ reenvio do mesmo lidoEm devolve 200 com o mesmo id e a mesma presença (R11) (16.617ms)\n  ✔ código errado com envio tardio devolve 422 SINCRONIZACAO_TARDIA, antes de CODIGO_INVALIDO (R16) (15.9858ms)\n  ✔ não inscrito com envio tardio devolve 403 NAO_INSCRITO, antes de SINCRONIZACAO_TARDIA (R16) (12.4056ms)\n  ✔ atividade cancelada antes do envio: presença lida antes do cancelamento devolve 403 NAO_INSCRITO (R18) (17.6624ms)\n  ✔ atividade cancelada depois da presença registrada: reenvio devolve 200 com a mesma presença (R18) (21.1039ms)\n✔ F3 — Presença offline (lidoEm) (436.5966ms)\n▶ F4 — Presença manual\n  ✔ manual válida às 20:00 por org-ana para p-carla confirmada devolve 201 com origem manual e justificativa gravada (R10, R15) (166.4733ms)\n  ✔ manual aceita em 18:45:00 (inicio − 15 min, borda da abertura da janela manual) (16.5833ms)\n  ✔ manual recusada em 18:44:59 (inicio − 15 min − 1 s) com 422 FORA_DA_JANELA (13.3455ms)\n  ✔ manual aceita às 00:00:00 de 20/10 (fim + 2 h, borda do fechamento da janela manual) (11.1394ms)\n  ✔ manual recusada às 00:00:01 de 20/10 (fim + 2 h + 1 s) com 422 FORA_DA_JANELA (22.0969ms)\n  ✔ manual sem justificativa devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (16.2557ms)\n  ✔ manual com justificativa vazia devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (29.0965ms)\n  ✔ manual com justificativa só de espaços devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (18.0755ms)\n  ✔ manual com justificativa de 3 caracteres devolve 422 JUSTIFICATIVA_OBRIGATORIA (R13) (22.817ms)\n  ✔ manual com justificativa de tipo errado devolve 422 DADOS_INVALIDOS (R13) (13.0085ms)\n  ✔ manual sem participanteId devolve 422 DADOS_INVALIDOS (16.6151ms)\n  ✔ manual para participante em_espera devolve 403 NAO_INSCRITO (R8) (11.8685ms)\n  ✔ manual para participanteId desconhecido devolve 403 NAO_INSCRITO (R8) (6.805ms)\n  ✔ com 5 confirmadas, a 1ª manual devolve 201 e a 2ª (para outro participante) devolve 422 LIMITE_DE_MANUAIS (R14) (29.524ms)\n  ✔ com 1 confirmada, a 1ª manual ainda devolve 201 (10% arredondando para cima, R14) (12.7652ms)\n  ✔ manual repetida para quem já tem presença QR devolve 200 com a mesma presença (R11 antes de R8/R15) (28.8033ms)\n  ✔ manual repetida para quem já tem presença manual devolve 200 com a mesma presença, antes do limite (R17) (14.7812ms)\n  ✔ em_espera com justificativa curta devolve 422 JUSTIFICATIVA_OBRIGATORIA, antes de NAO_INSCRITO (R17) (14.2634ms)\n  ✔ limite atingido e fora da janela devolve 422 FORA_DA_JANELA, antes de LIMITE_DE_MANUAIS (R17) (21.2149ms)\n  ✔ participante em POST /encontros/:id/presencas/manual devolve 403 SOMENTE_ORGANIZACAO (R22) (6.3239ms)\n  ✔ quem já tem presença manual, com justificativa curta, recebe 422 JUSTIFICATIVA_OBRIGATORIA — justificativa vem antes da presença existente (R17) (11.2893ms)\n✔ F4 — Presença manual (515.0013ms)\n▶ F5 — Lista de presenças\n  ✔ GET sem nenhuma presença registrada devolve 200 com lista vazia (R19) (185.611ms)\n  ✔ p-carla QR 19:03:45 e p-diego manual 20:00 → lista com 2, p-carla antes de p-diego, com os campos do contrato (R19) (47.2655ms)\n  ✔ duas presenças com o mesmo registradaEm ficam em ordem crescente por id (R19) (40.3945ms)\n  ✔ presença registrada às 18:47 continua na lista após cancelar a atividade às 18:50 (R24) (20.9323ms)\n  ✔ participante em GET /encontros/:id/presencas devolve 403 SOMENTE_ORGANIZACAO (R22) (8.0779ms)\n  ✔ GET de encontro inexistente devolve 404 NAO_ENCONTRADO (R22) (6.8577ms)\n  ✔ DELETE e PATCH de presença devolvem 404 NAO_ENCONTRADO em JSON — não há rota de edição nem apagamento (R20) (16.2291ms)\n  ✔ POST /encontros/:id/saidas devolve 404 NAO_ENCONTRADO em JSON — não há rota de saída (R21) (8.8453ms)\n✔ F5 — Lista de presenças (351.9098ms)\n▶ F3 — dados iniciais e GET /salas\n  ✔ GET /salas com X-Usuario: p-carla retorna 200 com as 4 salas iniciais (58.0432ms)\n  ✔ GET /salas sem X-Usuario devolve 401 USUARIO_DESCONHECIDO (5.7098ms)\n  ✔ GET /salas com X-Usuario inexistente devolve 401 USUARIO_DESCONHECIDO (4.7165ms)\n✔ F3 — dados iniciais e GET /salas (79.9471ms)\nℹ tests 181\nℹ suites 23\nℹ pass 181\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2753.0024\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "npm test",
+      "time": {
+       "start": 1789682567854,
+       "end": 1789682571418
+      }
+     },
+     "id": "prt_0b164ca53001kIi24pBqsh5GKi",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164c178001QaYV46zlzLbcIr"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 55049,
+      "input": 768,
+      "output": 265,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 54016
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b164d9ea001lBvihYjShdbnU4",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164c178001QaYV46zlzLbcIr"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 62167,
+     "input": 6788,
+     "output": 339,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 55040
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682572086,
+     "completed": 1789682577651
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b164db36001KwjFMaxeW5qIfK",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-start",
+     "id": "prt_0b164e851001IrzeDy5eRXUIfF",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164db36001KwjFMaxeW5qIfK"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now the full suite is green: tests 181, pass 181, fail 0. The earlier single-file failure in inscricoes-f3 was transient (node --test runs files in parallel child processes and each child must be spawned; that was a one-off flake, passing now, and it passed when run alone too).\n\nSo total is 181 tests now (178 existing + 3 new). The user said \"todos os 178 existentes precisam continuar verdes\" — the existing tests are green. The 3 new tests are also green. I added a 23rd suite/file.\n\nWait, let me double check: before my change, were there 178 tests? The user says \"todos os 178 existentes precisam continuar verdes\". Now 181 = 178 + 3. Good.\n\nNow commit. The message: `M1: resposta de Atividade sem o campo interno cancelada (achado do revisor-de-contrato)`\n\nLet me check git status and diff.",
+     "time": {
+      "start": 1789682575444,
+      "end": 1789682576394
+     },
+     "id": "prt_0b164e854001l44Ff4iilRo9CL",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164db36001KwjFMaxeW5qIfK"
+    },
+    {
+     "type": "text",
+     "text": "Full suite is green: 181 tests passing (178 existing + 3 new). The earlier `inscricoes-f3` failure was a transient flake in parallel test-runner child processes — it passes alone and in the full run. Committing now.",
+     "time": {
+      "start": 1789682576398,
+      "end": 1789682576747
+     },
+     "id": "prt_0b164ec0e0015s2f6fByOZE4OC",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164db36001KwjFMaxeW5qIfK"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_debb5385dee74032a375c193",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "git status; git diff --stat",
+       "workdir": "C:\\semana-academica"
+      },
+      "output": "On branch main\nYour branch is ahead of 'origin/main' by 1 commit.\n  (use \"git push\" to publish your local commits)\n\nChanges not staged for commit:\n  (use \"git add <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tmodified:   api/src/atividades.js\n\tmodified:   api/src/inscricoes.js\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tapi/test/atividades-contrato.test.js\n\tevidencias/sessoes/felipe-caldeira-akryghti/\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\")\n api/src/atividades.js | 8 +++++++-\n api/src/inscricoes.js | 4 ++--\n 2 files changed, 9 insertions(+), 3 deletions(-)\n",
+      "metadata": {
+       "output": "On branch main\nYour branch is ahead of 'origin/main' by 1 commit.\n  (use \"git push\" to publish your local commits)\n\nChanges not staged for commit:\n  (use \"git add <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tmodified:   api/src/atividades.js\n\tmodified:   api/src/inscricoes.js\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tapi/test/atividades-contrato.test.js\n\tevidencias/sessoes/felipe-caldeira-akryghti/\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\")\n api/src/atividades.js | 8 +++++++-\n api/src/inscricoes.js | 4 ++--\n 2 files changed, 9 insertions(+), 3 deletions(-)\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "git status; git diff --stat",
+      "time": {
+       "start": 1789682576727,
+       "end": 1789682577092
+      }
+     },
+     "id": "prt_0b164ecbf001OWSC3VrK1T7qTs",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164db36001KwjFMaxeW5qIfK"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 62167,
+      "input": 6788,
+      "output": 339,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 55040
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b164efdd001S3YlJpvl3FPTEh",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164db36001KwjFMaxeW5qIfK"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 62592,
+     "input": 438,
+     "output": 202,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 61952
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682577658,
+     "completed": 1789682582837
+    },
+    "finish": "tool-calls",
+    "id": "msg_0b164f0fa001zDF8MfIb00dfpk",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-start",
+     "id": "prt_0b164f827001xZ6w3LWTf1hIGC",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164f0fa001zDF8MfIb00dfpk"
+    },
+    {
+     "type": "reasoning",
+     "text": "The untracked `evidencias/sessoes/felipe-caldeira-akryghti/` is session evidence, not part of my change. I should stage only the intended files: the two source files and the new test file. I won't commit the evidencias folder since it's not mine to include — stage only the three files.",
+     "time": {
+      "start": 1789682579498,
+      "end": 1789682581616
+     },
+     "id": "prt_0b164f82a001pFOf6Ha8U0oRfo",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164f0fa001zDF8MfIb00dfpk"
+    },
+    {
+     "type": "tool",
+     "tool": "bash",
+     "callID": "call_23d8e4bf6fdc4082a85b0b21",
+     "state": {
+      "status": "completed",
+      "input": {
+       "command": "git add api/src/atividades.js api/src/inscricoes.js api/test/atividades-contrato.test.js; if ($?) { git commit -m \"M1: resposta de Atividade sem o campo interno cancelada (achado do revisor-de-contrato)\" }",
+       "workdir": "C:\\semana-academica"
+      },
+      "output": "warning: in the working copy of 'api/test/atividades-contrato.test.js', LF will be replaced by CRLF the next time Git touches it\n[main 1d672c5] M1: resposta de Atividade sem o campo interno cancelada (achado do revisor-de-contrato)\n 3 files changed, 117 insertions(+), 3 deletions(-)\n create mode 100644 api/test/atividades-contrato.test.js\n",
+      "metadata": {
+       "output": "warning: in the working copy of 'api/test/atividades-contrato.test.js', LF will be replaced by CRLF the next time Git touches it\n[main 1d672c5] M1: resposta de Atividade sem o campo interno cancelada (achado do revisor-de-contrato)\n 3 files changed, 117 insertions(+), 3 deletions(-)\n create mode 100644 api/test/atividades-contrato.test.js\n",
+       "exit": 0,
+       "truncated": false
+      },
+      "title": "git add api/src/atividades.js api/src/inscricoes.js api/test/atividades-contrato.test.js; if ($?) { git commit -m \"M1: resposta de Atividade sem o campo interno cancelada (achado do revisor-de-contrato)\" }",
+      "time": {
+       "start": 1789682581839,
+       "end": 1789682582207
+      }
+     },
+     "id": "prt_0b1650075001evyLFrXtU6GvLd",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164f0fa001zDF8MfIb00dfpk"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 62592,
+      "input": 438,
+      "output": 202,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 61952
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b1650413001Bwe0pIjyGwcugA",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b164f0fa001zDF8MfIb00dfpk"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0b1640482001huGYHc9Rm0jVBW",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\semana-academica",
+     "root": "C:\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 62986,
+     "input": 239,
+     "output": 283,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 62464
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789682582842,
+     "completed": 1789682586301
+    },
+    "finish": "stop",
+    "id": "msg_0b165053a001cUXrepVWdJPRuz",
+    "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U"
+   },
+   "parts": [
+    {
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-start",
+     "id": "prt_0b1650a91001UulKxNHC1M21qA",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b165053a001cUXrepVWdJPRuz"
+    },
+    {
+     "type": "text",
+     "text": "Pronto, commit `1d672c5`.\n\n**Teste** (`api/test/atividades-contrato.test.js`): 3 testes cobrindo POST /atividades, GET /atividades/:id e POST /atividades/:id/cancelamento — todos falharam antes do código (`'cancelada' in body` → `true !== false`), conforme TDD.\n\n**Código**: `formatar` em `src/atividades.js:93` não espalha mais a atividade — constrói o objeto com os 11 campos do contrato; o `cancelada` interno continua no array (`situacaoDa`, conflito de sala, alterar/cancelar). As duas leituras em `src/inscricoes.js:18` e `:258` foram trocadas por `atividade.situacao === 'cancelada'`.\n\n**Suíte**: `npm test` — **181 testes, 181 pass, 0 fail** (178 existentes verdes + 3 novos). Obs.: na primeira rodada `inscricoes-f3` falhou no nível do arquivo sem detalhes; repetindo o arquivo sozinho e a suíte inteira passou — flake do runner paralelo, não relacionado à mudança.",
+     "time": {
+      "start": 1789682584211,
+      "end": 1789682585719
+     },
+     "id": "prt_0b1650a93001OpS9ZRDJke8k7p",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b165053a001cUXrepVWdJPRuz"
+    },
+    {
+     "reason": "stop",
+     "snapshot": "46f284609d723c9b6a88e5174b831270b7a993ef",
+     "type": "step-finish",
+     "tokens": {
+      "total": 62986,
+      "input": 239,
+      "output": 283,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 62464
+      }
+     },
+     "cost": 0,
+     "id": "prt_0b16511a2001ikyu9ZMXxVURoZ",
+     "sessionID": "ses_f4e9bfb89ffeYVtTEPORowOc5U",
+     "messageID": "msg_0b165053a001cUXrepVWdJPRuz"
+    }
+   ]
+  }
+ ]
+}
