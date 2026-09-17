@@ -87,7 +87,7 @@ function hex8() {
   ).join('')
 }
 
-export function registrarPresenca(encontrado, participanteId, codigo) {
+export function registrarPresenca(encontrado, participanteId, codigo, lidoEm) {
   const { atividade, encontro } = encontrado
   const existente = presencas.find(
     p => p.encontroId === encontro.id && p.participanteId === participanteId
@@ -101,20 +101,33 @@ export function registrarPresenca(encontrado, participanteId, codigo) {
   if (!inscricoes.some(i => i.status === 'confirmada')) {
     return { erro: 'NAO_INSCRITO' }
   }
-  const instante = agora()
-  if (!dentroDaJanela(instante, encontro.inicio)) {
+  const instanteDoEnvio = agora()
+  // R9: com lidoEm, o envio é aceito até 2 horas depois do fim, borda incluída.
+  if (
+    lidoEm &&
+    Date.parse(instanteDoEnvio) > Date.parse(encontro.fim) + 2 * 60 * MINUTO
+  ) {
+    return { erro: 'SINCRONIZACAO_TARDIA' }
+  }
+  // Com lidoEm, a janela e o código são conferidos no instante da leitura (R12).
+  // lidoEm no futuro não é erro: vale o instante do envio (R12).
+  let instanteDeLeitura = lidoEm ?? instanteDoEnvio
+  if (lidoEm && Date.parse(instanteDeLeitura) > Date.parse(instanteDoEnvio)) {
+    instanteDeLeitura = instanteDoEnvio
+  }
+  if (!dentroDaJanela(instanteDeLeitura, encontro.inicio)) {
     return { erro: 'FORA_DA_JANELA' }
   }
-  if (!codigoEhValido(encontro.id, codigo, instante)) {
+  if (!codigoEhValido(encontro.id, codigo, instanteDeLeitura)) {
     return { erro: 'CODIGO_INVALIDO' }
   }
   const presenca = {
     id: `pre_${hex8()}`,
     encontroId: encontro.id,
     participanteId,
-    origem: 'qr',
-    lidoEm: instante,
-    registradaEm: instante,
+    origem: lidoEm ? 'qr_offline' : 'qr',
+    lidoEm: instanteDeLeitura,
+    registradaEm: instanteDoEnvio,
     justificativa: null
   }
   presencas.push(presenca)

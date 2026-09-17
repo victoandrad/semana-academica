@@ -155,7 +155,16 @@ export function createApp() {
         .status(422)
         .json({ erro: dadosInvalidos, mensagem: 'Código é obrigatório e deve ser texto.' })
     }
-    const resultado = registrarPresenca(encontrado, req.header('X-Usuario'), req.body.codigo)
+    if (
+      req.body?.lidoEm !== undefined &&
+      (typeof req.body.lidoEm !== 'string' ||
+        Number.isNaN(Date.parse(req.body.lidoEm)))
+    ) {
+      return res
+        .status(422)
+        .json({ erro: dadosInvalidos, mensagem: 'lidoEm deve ser uma data ISO 8601 válida.' })
+    }
+    const resultado = registrarPresenca(encontrado, req.header('X-Usuario'), req.body.codigo, req.body.lidoEm)
     if (resultado && resultado.erro) {
       const status = resultado.erro === 'NAO_INSCRITO' ? 403 : 422
       return res
