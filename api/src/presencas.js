@@ -76,6 +76,59 @@ function codigoEhValido(encontroId, codigo, instante) {
   return normalizado === atual || normalizado === anterior
 }
 
+export function dentroDaJanelaManual(instante, inicio, fim) {
+  const t = Date.parse(instante)
+  const abre = Date.parse(inicio) - 15 * MINUTO
+  const fecha = Date.parse(fim) + 2 * 60 * MINUTO
+  return t >= abre && t <= fecha
+}
+
+export function registrarPresencaManual(encontrado, participanteId, justificativa) {
+  const { atividade, encontro } = encontrado
+  const existente = presencas.find(
+    p => p.encontroId === encontro.id && p.participanteId === participanteId
+  )
+  if (existente) {
+    return { presenca: { ...existente }, jaExistia: true }
+  }
+  if (justificativa == null || justificativa.trim().length < 10) {
+    return { erro: 'JUSTIFICATIVA_OBRIGATORIA' }
+  }
+  const inscricoes = listarInscricoes('org-ana', 'organizacao', {
+    atividadeId: atividade.id
+  })
+  if (
+    !inscricoes.some(
+      i => i.participanteId === participanteId && i.status === 'confirmada'
+    )
+  ) {
+    return { erro: 'NAO_INSCRITO' }
+  }
+  const instante = agora()
+  if (!dentroDaJanelaManual(instante, encontro.inicio, encontro.fim)) {
+    return { erro: 'FORA_DA_JANELA' }
+  }
+  const manuais = presencas.filter(
+    p => p.encontroId === encontro.id && p.origem === 'manual'
+  ).length
+  const confirmadas = inscricoes.filter(i => i.status === 'confirmada').length
+  const limite = Math.ceil(0.1 * confirmadas)
+  if (manuais >= limite) {
+    return { erro: 'LIMITE_DE_MANUAIS' }
+  }
+  const presenca = {
+    id: `pre_${hex8()}`,
+    encontroId: encontro.id,
+    participanteId,
+    origem: 'manual',
+    lidoEm: instante,
+    registradaEm: instante,
+    justificativa
+  }
+  presencas.push(presenca)
+  return { presenca, jaExistia: false }
+}
+
 export function resetPresencas() {
   codigos = new Map()
   presencas = []

@@ -19,7 +19,7 @@ import {
   resetInscricoes
 } from './inscricoes.js'
 import { setRelogio, lerRelogio, resetRelogio, agora } from './relogio.js'
-import { buscarEncontro, dentroDaJanela, codigoDoMinuto, trocaDeCodigo, registrarPresenca, resetPresencas } from './presencas.js'
+import { buscarEncontro, dentroDaJanela, codigoDoMinuto, trocaDeCodigo, registrarPresenca, registrarPresencaManual, resetPresencas } from './presencas.js'
 
 const usuarioDesconhecido = 'USUARIO_DESCONHECIDO'
 const dadosInvalidos = 'DADOS_INVALIDOS'
@@ -165,6 +165,39 @@ export function createApp() {
         .json({ erro: dadosInvalidos, mensagem: 'lidoEm deve ser uma data ISO 8601 válida.' })
     }
     const resultado = registrarPresenca(encontrado, req.header('X-Usuario'), req.body.codigo, req.body.lidoEm)
+    if (resultado && resultado.erro) {
+      const status = resultado.erro === 'NAO_INSCRITO' ? 403 : 422
+      return res
+        .status(status)
+        .json({ erro: resultado.erro, mensagem: 'Presença não pode ser registrada.' })
+    }
+    return res.status(resultado.jaExistia ? 200 : 201).json(resultado.presenca)
+  })
+  app.post('/encontros/:id/presencas/manual', identificacao, organizacao, (req, res) => {
+    const encontrado = buscarEncontro(req.params.id)
+    if (!encontrado) {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Encontro não encontrado.' })
+    }
+    if (typeof req.body?.participanteId !== 'string') {
+      return res
+        .status(422)
+        .json({ erro: dadosInvalidos, mensagem: 'participanteId é obrigatório e deve ser texto.' })
+    }
+    if (
+      req.body?.justificativa !== undefined &&
+      typeof req.body.justificativa !== 'string'
+    ) {
+      return res
+        .status(422)
+        .json({ erro: dadosInvalidos, mensagem: 'justificativa deve ser texto.' })
+    }
+    const resultado = registrarPresencaManual(
+      encontrado,
+      req.body.participanteId,
+      req.body.justificativa
+    )
     if (resultado && resultado.erro) {
       const status = resultado.erro === 'NAO_INSCRITO' ? 403 : 422
       return res
