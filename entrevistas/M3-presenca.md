@@ -1,0 +1,39 @@
+# Entrevista — M3: Presença por QR
+
+| # | Pergunta | Resposta | Fonte | Verificação |
+|---|----------|----------|-------|-------------|
+| P-01 | Janela de presença (abertura): a janela para registrar presençaQR abre quando? | PENDENTE | contrato §5 | Relógio em `<inicio>` − 1s → `FORA_DA_JANELA`; relógio em `<inicio>` → 201 |
+| P-02 | Janela de presença (fechamento): a janela para registrar presençaQR fecha quando? | PENDENTE | contrato §5 | Relógio em `<fim>` → 201; relógio em `<fim>` + 1s → `FORA_DA_JANELA` |
+| P-03 | Janela do código: a janela para `GET /encontros/:id/codigo` é a mesma da presença? | PENDENTE | contrato §5 | `GET /encontros/:id/codigo` antes de `<inicio>` → `FORA_DA_JANELA` ou 200? (depende de P-01/P-02) |
+| P-04 | Frequência de troca (`trocaEm`): de quanto em quanto tempo o código é trocado? | PENDENTE | contrato §5 | Dois `GET`s seguidos; quando o relógio cruza o valor marcado <PENDENTE P-04> o primeiro código muda |
+| P-05 | Validade do código (`validoAte`): quanto tempo um código emitido fica válido? | PENDENTE | contrato §5 | Emitir código em t; relógio em `validoAte` − 1s → 201; relógio em `validoAte` → código começa a rejeitar (depende de P-04/P-05) |
+| P-06 | Prazo de sincronização offline (`SINCRONIZACAO_TARDIA`): qual o prazo para enviar `lidoEm`? | PENDENTE | contrato §6 | Encontro termina em `<fim>`; `lidoEm` = `<fim>` − 1s, enviado em `<fim>` + X → 201 se X < <PENDENTE P-06>, `SINCRONIZACAO_TARDIA` depois |
+| P-07 | Limite de manuais (`LIMITE_DE_MANUAIS`): quantas presenças manuais por encontro? | PENDENTE | contrato §6 | Registrar N+1 manuais; N = <PENDENTE P-07>, N+1 → `LIMITE_DE_MANUAIS` |
+| P-08 | ORDEM: código errado + fora da janela — qual erro aparece primeiro? | PENDENTE | contrato §6 | Enviar código errado fora da janela → `FORA_DA_JANELA` se janela primeiro, `CODIGO_INVALIDO` se código primeiro |
+| P-09 | Alfabeto dos 6 caracteres do código: quais caracteres são válidos? Aceita minúscula? Ignora espaço? | PENDENTE | contrato §5 (6 chars) | Minúscula do mesmo código → aceita ou `CODIGO_INVALIDO`? Código com espaço → `CODIGO_INVALIDO` ou `DADOS_INVALIDOS`? |
+| P-10 | O que decide cada valor de `origem`: `qr`, `qr_offline`, `manual`? | PENDENTE | contrato §5 | POST com `lidoEm` → `qr_offline`? Sem `lidoEm` → `qr`? Rota manual → `manual`? |
+| P-11 | Presença repetida devolve 200: isso vem antes ou depois de conferir janela e código? | PENDENTE | contrato §5 | Presença já existe; fora da janela; código errado → 200 ou erro? (depende de P-02/P-08) |
+| P-12 | `lidoEm` com instante no futuro (relógio de celular adiantado): o que acontece? | PENDENTE | contrato §5 | `lidoEm` = <PENDENTE P-02/P-04/P-05> + 5min; código válido; inscrito → 201, `FORA_DA_JANELA` ou `SINCRONIZACAO_TARDIA`? |
+| P-13 | Quem pode registrar presença (`POST /encontros/:id/presencas`), e em qual `status` de inscrição? | PENDENTE | contrato §5 (NAO_INSCRITO) | Participante com inscrição `<status>` → `NAO_INSCRITO` ou 201? (quais status valem: só confirmada?) |
+| P-14 | Tamanho mínimo da `justificativa` na presença manual? | PENDENTE | contrato §5 | `justificativa: ""` → `JUSTIFICATIVA_OBRIGATORIA` ou `DADOS_INVALIDOS`? Só espaço → idem? |
+| P-15 | A janela de `POST /encontros/:id/presencas/manual` é a mesma da automática? | PENDENTE | contrato §6 (FORA_DA_JANELA) | Manual após `<fim>` → 201 ou `FORA_DA_JANELA`? (depende de P-01/P-02) |
+| P-16 | Presença em atividade cancelada: o que acontece? (`ATIVIDADE_CANCELADA` não está listada para registrar presença no §6 — qual código então?) | PENDENTE | contrato §6 | Atividade cancelada, encontro futuro; registrar presença → 201, `NAO_ENCONTRADO`, `FORA_DA_JANELA` ou outro? |
+| P-17 | Ordem da lista em `GET /encontros/:id/presencas`: por que ordem? | PENDENTE | contrato §5 | Duas presenças registradas; verificar ordem no array retornado |
+| P-18a | M3 não tem correção/apagamento de presença | **CONFIRMADO** | contrato §5 (sem DELETE/PATCH de presença) | Rota de delete/edit ausente → tentar chama inexistente 404 |
+| P-18b | M3 não tem check-out (saída) | **CONFIRMADO** | contrato §5 (sem rota de check-out) | Sem rota de saída entre as rotas de M3 |
+| P-18c | M3 não registra presença para quem não é participante | **CONFIRMADO** | contrato §5 (`POST /encontros/:id/presencas` = participante) | Organização na rota de participante → `SOMENTE_PARTICIPANTE` |
+| P-18d | A lista (a)(b)(c) de não-faz está completa? Falta algo? | PENDENTE | — | Verificar se algum fluxo pedido pelo requisito cai em M3 mas não está em (a)(b)(c) |
+| P-27 | Leitura offline reenviada (mesmo `lidoEm`) → 200 com a presença já criada, ou segunda presença? (depende de P-10, P-11) | PENDENTE | contrato §5 | Enviar a mesma leitura offline 2×; segunda → 200 (mesmo `id`?) ou 201 (novo `id`)? |
+| P-28 | ~~Origem incluída na lista~~ — RETIRADA: o contrato já responde (`[Presenca]` com campo `origem` exclusivo)| RETIRADA | contrato §5 | — |
+| P-19 | Código válido de um encontro usado em outro encontro: código de `enc_A` enviado a `enc_B` → `CODIGO_INVALIDO`? | PENDENTE | contrato §5 | Código emitido em encontro 1; enviado em rota do encontro 2 → `CODIGO_INVALIDO` |
+| P-20 | Se a atividade é alterada e a janela do encontro muda, o código anterior continua válido até `validoAte` original ou é invalidado? | PENDENTE | **DEPENDE da spec de M1** (`specs/M1-grade.md` não decidiu campos editáveis; ver §6 `CAMPO_NAO_EDITAVEL`) | Só verificável depois de P-20a: quais campos do encontro são editáveis |
+| P-20a | Quais campos de atividade/encontro são editáveis via PATCH (depende do fim da entrevista de M1)? | PENDENTE | [`specs/M1-grade.md`] — não lida | <PENDENTE P-20a> |
+| P-21 | A janela (`FORA_DA_JANELA`) é conferida contra o `lidoEm` (quando enviado) e contra o relógio atual (quando ausente)? | PENDENTE | contrato §5 (`lidoEm` = "o instante que valeu para as regras") | Encontro em t1–t2; leitura offline com `lidoEm` em t2−1min, conexão em t2+10min → 201 ou `FORA_DA_JANELA`? (depende de P-06) |
+| P-22 | Precedência `NAO_INSCRITO` × janela: não inscrito + fora da janela → `NAO_INSCRITO` ou `FORA_DA_JANELA`? | PENDENTE | contrato §1 (403 antes de 422) | Não inscrito, fora da janela, código válido → `NAO_INSCRITO` ou `FORA_DA_JANELA`? |
+| P-23 | Precedência `CODIGO_INVALIDO` × `SINCRONIZACAO_TARDIA`: código errado + sincronização tardia → qual erro? | PENDENTE | contrato §6 | Código errado + `lidoEm` além do prazo → `CODIGO_INVALIDO` ou `SINCRONIZACAO_TARDIA`? |
+| P-24 | `lidoEm` antes do início do encontro (relógio atrasado): aceita ou `FORA_DA_JANELA`? | PENDENTE | contrato §5 | `lidoEm` = `<inicio>` − 5min; código válido; inscrito → 201 ou `FORA_DA_JANELA`? |
+| P-25 | Presenças registradas antes de cancelamento: `GET /encontros/:id/presencas` continua listando após cancelamento? | PENDENTE | contrato §6/§5 | Registrar presença; cancelar atividade; `GET /encontros/:id/presencas` → ainda lista a presença? |
+| P-26 | Presença manual: participante precisa do mesmo `status` de inscrição da automática (P-13), ou a manual é mais permissiva? | PENDENTE | contrato §6 (`NAO_INSCRITO` em manual) | Manual para inscrição `em_espera` → registra ou `NAO_INSCRITO`? |
+| P-29 | Vários `GET /encontros/:id/codigo` na mesma janela → mesmo código/`trocaEm`/`validoAte`, ou a cada acesso gira? (depende de P-04, P-05) | PENDENTE | contrato §5 | Duas chamadas seguidas ao `GET` sem avançar relógio → códigos iguais ou diferentes? |
+| P-30 | Leitura offline de código válido, atividade cancelada antes da sincronização → presença aceita ou não? (depende de P-16, P-25) | PENDENTE | contrato §6 | Leitura em t1; cancelamento em t2; envio em t3 → 201 ou erro? |
+| P-31 | Inscrição `convocada` (M2) tem direito a presença QR? | PENDENTE — **DEPENDE da spec de M2** (`specs/M2-inscricoes.md` não define o status ainda) | contrato §5/M2 | Participante `convocada` registra presença → 201 ou `NAO_INSCRITO`? |
