@@ -13,15 +13,16 @@ pare e pergunte só aquilo. Não preencha buraco com "geralmente é assim".
 
 ## Onde escrever
 
-`spec-<recurso>.md`, na raiz do projeto. Um arquivo por recurso.
+`specs/Mx-<nome>.md`, uma spec por módulo — o auditor procura aí: `.opencode/agent/auditor.md` lê
+`specs/Mx-*.md` na entrada. O `x` é o número do módulo (M1 a M5).
 
 ## Antes de escrever
 
 Leia o repositório: convenções, vocabulário, nomes que já existem. A spec fala a língua
-do projeto — se o código chama de `leitor`, a spec não inventa `usuário`.
+do projeto — se o código chama de `encontro`, a spec não inventa `aula`.
 
 Decida também **onde isto vai ser verificado**. Prefira a costura mais externa que já
-existir (aqui: HTTP, pelo `criarServidor()`). Quanto menos pontos de teste novos, melhor.
+existir (aqui: HTTP, falando com a API por `fetch`). Quanto menos pontos de teste novos, melhor.
 
 ## Modelo
 
@@ -47,7 +48,7 @@ Numeradas: R1, R2, R3… Uma regra por linha de decisão, cada uma com o número
 ou o valor exato que foi decidido, e o status HTTP de recusa quando houver.
 
 Toda regra precisa ser observável de fora. "O sistema deve ser rápido" não é regra.
-"Devolver depois da data prevista cobra 1,50 por dia inteiro de atraso, teto de 30" é.
+"Faltando 15 minutos para o início do encontro, a inscrição fecha com 422 INSCRICOES_ENCERRADAS" é.
 
 Quando duas regras podem recusar a mesma operação, diga qual vale primeiro.
 
