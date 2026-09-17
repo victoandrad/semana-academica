@@ -30,3 +30,4 @@ Regras para quem trabalha dentro de `api/`. As da raiz continuam valendo; estas 
 ## Regras que nasceram de erro
 
 - 2026-09-17: agente criou health check e rota temporária de teste fora do contrato. Regra: nenhuma rota fora do contrato, nem em `MODO_TESTE`. — commit `2d8bc2b`
+- 2026-09-17: na F1 do M3, o agente derivou o código de presença só do minuto do relógio — todos os encontros tinham o mesmo código no mesmo minuto, e qualquer um podia calcular sem estar na sala. Regra: código de presença é sorteado por (encontro, minuto) e guardado; nunca é função só do tempo. — `src/presencas.js`, teste "dois encontros no mesmo minuto têm códigos diferentes"
