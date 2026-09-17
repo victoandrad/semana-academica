@@ -262,9 +262,9 @@ segue `posicaoNaEspera`. Falta decidir no M2. (P-27)
    com 1 → idem; minicurso com 6 → idem; palestra com 1 → 201.
 6. (R6) Encontro de 30 min → 422 `ENCONTRO_INVALIDO`; de 5h → idem; `fim` = `inicio`
    → idem; encontro de 3h → 201.
-7. (R7) Encontro em 17/10 → 422 `ENCONTRO_INVALIDO`; 23:00–00:30 (meia-noite) → idem;
-   início antes do relógio → 201 (não proibido).
-8. (R8) Encontro em sábado do evento ou às 02h → 201 (sem restrição de dia/faixa).
+7. (R7) Encontro em 17/10 (sábado, fora da janela) → 422 `ENCONTRO_INVALIDO`;
+   23:00–00:30 (meia-noite) → idem; início antes do relógio → 201 (não proibido).
+8. (R8) Encontro às 02h de um dia do evento → 201 (sem restrição de faixa horária).
 9. (R9) Encontro D dentro da janela de E (mesma atividade) → 422 `ENCONTRO_INVALIDO`;
    fim de D = início de E → idem.
 10. (R10, R11) `vagas: 41` em `sala-101` (cap. 40) → 422 `VAGAS_ACIMA_DA_CAPACIDADE`;
@@ -289,7 +289,7 @@ segue `posicaoNaEspera`. Falta decidir no M2. (P-27)
     campos calculados continuam calculados (valores exatos dependem de M2 — R37/R38).
 20. (R26, R27, R28) Criar com encontros fora de ordem → resposta em ordem de início;
     `cargaHorariaMinutos` de 2 encontros de 3h → 360; enviar 999 no campo → retorno
-    continua 360; encontros de 50+50 min → 100 (sem arredondamento).
+    continua 360; encontros de 90+75 min → 165 (sem arredondamento).
 21. (R29, pendente M2) `vagasRestantes` = `vagas` − `ocupadas`; valor só verificável
     quando M2 decidir quais status contam em `ocupadas` (R37).
 22. (R30, R31) Criar 3 atividades com 1ºs encontros distintos → GET na ordem da RN-115;
