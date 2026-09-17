@@ -1,0 +1,11 @@
+# Agentes de IA usados no projeto — um bloco por integrante
+
+## Felipe Caldeira Akryghti (M3 — presença por QR)
+- OpenCode com chave própria do Google AI Studio (Gemini): rodadas 1 e 2 da entrevista, to-spec, tdd, @auditor, criação de skills e subagentes. Sessões exportadas em evidencias/sessoes/Felipe Caldeira Akryghti/.
+- Subagentes do repositório usados: auditor, revisor-de-contrato.
+- Skills usadas: grilling, to-spec, tdd, novo-subagente, nova-tela, regra-de-tempo.
+
+## Victor de Andrade Miranda (M1 — grade; M2 — inscrições)
+- OpenCode com chave própria do Google AI Studio (Gemini). Sessões exportadas em evidencias/sessoes/Victor de Andrade Miranda/.
+- Subagentes do repositório usados: auditor, revisor-de-contrato.
+- Skills usadas: grilling, to-spec, tdd.
