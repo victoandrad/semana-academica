@@ -40,4 +40,5 @@ Regras que o agente de IA deve seguir neste repositório. Cada linha tem uma jus
 
 ## Regras que nasceram de erro
 
-<!-- Cada linha: data, descrição do erro, regra que nasceu. -->
+- 2026-09-17: agente corrigiu typo em spec durante implementação sem perguntar. Regra: durante implementação, o agente não altera a spec — se código não bate, ele para e pergunta ao dono do módulo; alteração de spec é commit separado do código.
+- 2026-09-17: spec de M0 inventou rotas fora do contrato (health check e rota temporária de teste). Regra: nenhuma rota fora de contrato-api.md entra no código, nem como costura de teste — testes usam rotas do contrato.
