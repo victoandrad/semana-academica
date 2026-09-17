@@ -11,5 +11,8 @@
   "devDependencies": {
     "happy-dom": "^15.11.7",
     "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }
