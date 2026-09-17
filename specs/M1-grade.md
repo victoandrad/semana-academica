@@ -37,9 +37,9 @@ fonte é registrada como `documento silente — decisão do grupo, 2026-09-17` �
 | encontros | [Encontro] | informado — quantidade por tipo (R5); imutáveis após criar (R34) |
 | cargaHorariaMinutos | integer | calculado — soma de `(fim − início)` em minutos (R28) |
 | situacao | string | calculado — `"prevista"` \| `"em_andamento"` \| `"encerrada"` \| `"cancelada"` (R21, R22) |
-| ocupadas | integer | calculado — depende de M2, quais status contam (R37, pendente M2) |
+| ocupadas | integer | calculado — `confirmada` + `convocada` (R37; M2 R29) |
 | vagasRestantes | integer | calculado — `vagas` − `ocupadas` (R29) |
-| emEspera | integer | calculado — depende de M2, `em_espera` ativas (R38, pendente M2) |
+| emEspera | integer | calculado — inscrições `em_espera` em ordem de `posicaoNaEspera` (R38; M2 R30) |
 
 ### 3.2 Encontro
 
@@ -164,6 +164,11 @@ R18. Ordem das recusas no PATCH (422 × 409): `ATIVIDADE_CANCELADA` → `CAMPO_N
 decisão do grupo, 2026-09-17). Vale até resposta no Classroom; se a resposta divergir,
 a regra muda junto com o teste.
 
+R36. PATCH reduzindo `vagas` abaixo do nº de ocupantes → `409 VAGAS_ABAIXO_DOS_INSCRITOS`;
+reduzindo para exatamente o nº de ocupantes → 200. Ocupante = inscrição `confirmada` ou
+`convocada`; `em_espera`, `cancelada` e `expirada` não ocupam (M2 R28). (P-26; decidido por
+M2 R28)
+
 ### Cancelamento e situação
 
 R19. PATCH e novo cancelamento em atividade cancelada → `422 ATIVIDADE_CANCELADA`.
@@ -205,9 +210,18 @@ R28. `cargaHorariaMinutos` = soma de `(fim − início)` de todos os encontros, 
 minutos (RN-109). Sem arredondamento, teto ou mínimo sobre a soma; não varia por tipo.
 (P-25, RN-109)
 
-R29. **Pendente (M2).** `vagasRestantes` = `vagas` − `ocupadas`. Como `ocupadas` depende
-de M2 (R37 — quais status contam), o valor só é verificável quando M2 decidir. (P-08,
-contrato §5)
+R29. `vagasRestantes` = `vagas` − `ocupadas`. `ocupadas` conta o que ocupa vaga:
+`confirmada` e `convocada`; `em_espera`, `cancelada` e `expirada` não ocupam (M2 R28). (P-08,
+contrato §5; decidido por M2 R28/R29)
+
+R37. `ocupadas` conta as inscrições que ocupam vaga: `confirmada` + `convocada`.
+`em_espera`, `cancelada` e `expirada` não ocupam. Com a atividade cancelada, `ocupadas`
+continua calculado e vale 0 — todas as ativas viraram `cancelada` (M2 R27) e `cancelada`
+não ocupa vaga (R24, R25; M2 R29). (P-27; decidido por M2 R28/R29)
+
+R38. `emEspera` conta as inscrições `em_espera` da atividade, em ordem de
+`posicaoNaEspera` (ordem de chegada). `cancelada`/`expirada`/`convocada` não entram.
+(P-27; decidido por M2 R30)
 
 ### Listagem (GET /atividades)
 
@@ -238,18 +252,6 @@ e duas atividades podem ter o mesmo título; não há código de erro do campo �
 regras são alterável (RN-110, R15) e desempate na listagem (RN-115, R30). (P-37,
 documento silente — decisão do grupo, 2026-09-17). Vale até resposta no Classroom; se a
 resposta divergir, a regra muda junto com o teste.
-
-### Pendentes — dependem de M2
-
-R36. **Pendente (M2).** PATCH reduzindo `vagas` abaixo dos inscritos →
-`409 VAGAS_ABAIXO_DOS_INSCRITOS`. Falta decidir no M2 quais status contam como "ocupa
-vaga" (`confirmada` só, ou `convocada` também; `cancelada`/`expirada` não ocupam). (P-26)
-
-R37. **Pendente (M2).** `ocupadas` conta as inscrições ativas que ocupam vaga. Falta
-decidir no M2 quais status. (P-27)
-
-R38. **Pendente (M2).** `emEspera` conta as inscrições ativas `em_espera`, e a fila
-segue `posicaoNaEspera`. Falta decidir no M2. (P-27)
 
 ## 6. Critérios de aceite
 
@@ -290,8 +292,8 @@ segue `posicaoNaEspera`. Falta decidir no M2. (P-27)
 20. (R26, R27, R28) Criar com encontros fora de ordem → resposta em ordem de início;
     `cargaHorariaMinutos` de 2 encontros de 3h → 360; enviar 999 no campo → retorno
     continua 360; encontros de 90+75 min → 165 (sem arredondamento).
-21. (R29, pendente M2) `vagasRestantes` = `vagas` − `ocupadas`; valor só verificável
-    quando M2 decidir quais status contam em `ocupadas` (R37).
+21. (R29, R37) Atividade com 10 `confirmada` + 2 `convocada` + 3 `em_espera` →
+    `vagasRestantes` = `vagas` − 12 (M2 critério 17).
 22. (R30, R31) Criar 3 atividades com 1ºs encontros distintos → GET na ordem da RN-115;
     empate → por `titulo`; cancelar uma → continua na listagem e nos filtros.
 23. (R32) Atividade com encontros em 19 e 20 → `?dia=2026-10-20` retorna; sem encontro
@@ -301,8 +303,11 @@ segue `posicaoNaEspera`. Falta decidir no M2. (P-27)
 25. (R34, R35) PATCH tentando mexer em encontro → `CAMPO_NAO_EDITAVEL`; `enc_...` do
     GET posterior é o mesmo id; `titulo` vazio/1 caractere → 201; títulos duplicados
     → 201.
-26. (R36, R37, R38) Pendentes de M2: `VAGAS_ABAIXO_DOS_INSCRITOS`, `ocupadas`,
-    `vagasRestantes` e `emEspera` entram no critério quando M2 definir os status.
+26. (R36, R37, R38) PATCH reduzindo `vagas` abaixo de `ocupadas` (`confirmada` +
+    `convocada`) → 409 `VAGAS_ABAIXO_DOS_INSCRITOS`; reduzindo para exatamente o nº de
+    ocupantes → 200. `GET /atividades/:id` mostra `ocupadas`, `emEspera` e
+    `vagasRestantes` calculados; cancelada a atividade, `ocupadas: 0` e `emEspera: 0`
+    (M2 critério 17).
 
 ## 7. Como isto será verificado
 
