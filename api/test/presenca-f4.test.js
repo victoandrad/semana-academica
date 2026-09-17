@@ -358,7 +358,7 @@ describe('F4 — Presença manual', () => {
     assert.equal(status, 201)
   })
 
-  it('manual repetida para quem já tem presença QR devolve 200 com a mesma presença (R11 antes de R13/R15)', async () => {
+  it('manual repetida para quem já tem presença QR devolve 200 com a mesma presença (R11 antes de R8/R15)', async () => {
     await reset(port)
     const { atividadeId, encontroId } = await criaPalestra(port)
     await relogio(port, '2026-10-19T10:00:00-03:00')
@@ -474,5 +474,28 @@ describe('F4 — Presença manual', () => {
     assert.equal(status, 403)
     assert.equal(body.erro, 'SOMENTE_ORGANIZACAO')
     assert.equal(typeof body.mensagem, 'string')
+  })
+
+  it('quem já tem presença manual, com justificativa curta, recebe 422 JUSTIFICATIVA_OBRIGATORIA — justificativa vem antes da presença existente (R17)', async () => {
+    await reset(port)
+    const { atividadeId, encontroId } = await criaPalestra(port)
+    await relogio(port, '2026-10-19T10:00:00-03:00')
+    await inscreve(port, atividadeId, 'p-carla')
+    await relogio(port, '2026-10-19T20:00:00-03:00')
+    const primeira = await enviaManual(
+      port,
+      encontroId,
+      { participanteId: 'p-carla', justificativa: 'celular sem bateria' },
+      'org-ana'
+    )
+    assert.equal(primeira.status, 201)
+    const { status, body } = await enviaManual(
+      port,
+      encontroId,
+      { participanteId: 'p-carla', justificativa: 'abc' },
+      'org-ana'
+    )
+    assert.equal(status, 422)
+    assert.equal(body.erro, 'JUSTIFICATIVA_OBRIGATORIA')
   })
 })

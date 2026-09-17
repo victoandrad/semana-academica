@@ -85,14 +85,15 @@ export function dentroDaJanelaManual(instante, inicio, fim) {
 
 export function registrarPresencaManual(encontrado, participanteId, justificativa) {
   const { atividade, encontro } = encontrado
+  // R17: justificativa vem antes da presença existente.
+  if (justificativa == null || justificativa.trim().length < 10) {
+    return { erro: 'JUSTIFICATIVA_OBRIGATORIA' }
+  }
   const existente = presencas.find(
     p => p.encontroId === encontro.id && p.participanteId === participanteId
   )
   if (existente) {
     return { presenca: { ...existente }, jaExistia: true }
-  }
-  if (justificativa == null || justificativa.trim().length < 10) {
-    return { erro: 'JUSTIFICATIVA_OBRIGATORIA' }
   }
   const inscricoes = listarInscricoes('org-ana', 'organizacao', {
     atividadeId: atividade.id
