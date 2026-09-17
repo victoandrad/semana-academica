@@ -1,5 +1,7 @@
 import { randomInt } from 'node:crypto'
 import { listarAtividades } from './atividades.js'
+import { listarInscricoes } from './inscricoes.js'
+import { agora } from './relogio.js'
 
 const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const MINUTO = 60_000
@@ -7,6 +9,8 @@ const MINUTO = 60_000
 // Códigos emitidos: `${encontroId}:${minuto}` → código. O código é do encontro
 // e do minuto, sorteado na primeira emissão — não dá para calcular de fora da sala.
 let codigos = new Map()
+
+let presencas = []
 
 export function buscarEncontro(id) {
   for (const atividade of listarAtividades()) {
@@ -51,6 +55,67 @@ export function trocaDeCodigo(instante) {
   }
 }
 
+function normalizarCodigo(codigo) {
+  return codigo.replace(/\s+/g, '').toUpperCase()
+}
+
+// Leitura de R7: minúscula e espaço são aceitos; o código vale para o
+// minuto atual e o anterior (R5) e é do encontro (R6).
+function codigoEhValido(encontroId, codigo, instante) {
+  const normalizado = normalizarCodigo(codigo)
+  if (
+    normalizado.length !== 6 ||
+    [...normalizado].some(c => !ALFABETO.includes(c))
+  ) {
+    return false
+  }
+  const ms = Date.parse(instante)
+  const atual = codigoDoMinuto(encontroId, new Date(ms).toISOString())
+  const anterior = codigoDoMinuto(encontroId, new Date(ms - MINUTO).toISOString())
+  return normalizado === atual || normalizado === anterior
+}
+
 export function resetPresencas() {
   codigos = new Map()
+  presencas = []
+}
+
+function hex8() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(4)), b =>
+    b.toString(16).padStart(2, '0')
+  ).join('')
+}
+
+export function registrarPresenca(encontrado, participanteId, codigo) {
+  const { atividade, encontro } = encontrado
+  const existente = presencas.find(
+    p => p.encontroId === encontro.id && p.participanteId === participanteId
+  )
+  if (existente) {
+    return { presenca: { ...existente }, jaExistia: true }
+  }
+  const inscricoes = listarInscricoes(participanteId, 'participante', {
+    atividadeId: atividade.id
+  })
+  if (!inscricoes.some(i => i.status === 'confirmada')) {
+    return { erro: 'NAO_INSCRITO' }
+  }
+  const instante = agora()
+  if (!dentroDaJanela(instante, encontro.inicio)) {
+    return { erro: 'FORA_DA_JANELA' }
+  }
+  if (!codigoEhValido(encontro.id, codigo, instante)) {
+    return { erro: 'CODIGO_INVALIDO' }
+  }
+  const presenca = {
+    id: `pre_${hex8()}`,
+    encontroId: encontro.id,
+    participanteId,
+    origem: 'qr',
+    lidoEm: instante,
+    registradaEm: instante,
+    justificativa: null
+  }
+  presencas.push(presenca)
+  return { presenca, jaExistia: false }
 }

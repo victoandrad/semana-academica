@@ -19,7 +19,7 @@ import {
   resetInscricoes
 } from './inscricoes.js'
 import { setRelogio, lerRelogio, resetRelogio, agora } from './relogio.js'
-import { buscarEncontro, dentroDaJanela, codigoDoMinuto, trocaDeCodigo, resetPresencas } from './presencas.js'
+import { buscarEncontro, dentroDaJanela, codigoDoMinuto, trocaDeCodigo, registrarPresenca, resetPresencas } from './presencas.js'
 
 const usuarioDesconhecido = 'USUARIO_DESCONHECIDO'
 const dadosInvalidos = 'DADOS_INVALIDOS'
@@ -142,6 +142,27 @@ export function createApp() {
       codigo: codigoDoMinuto(encontro.id, instante),
       ...trocaDeCodigo(instante)
     })
+  })
+  app.post('/encontros/:id/presencas', identificacao, participante, (req, res) => {
+    const encontrado = buscarEncontro(req.params.id)
+    if (!encontrado) {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Encontro não encontrado.' })
+    }
+    if (typeof req.body?.codigo !== 'string') {
+      return res
+        .status(422)
+        .json({ erro: dadosInvalidos, mensagem: 'Código é obrigatório e deve ser texto.' })
+    }
+    const resultado = registrarPresenca(encontrado, req.header('X-Usuario'), req.body.codigo)
+    if (resultado && resultado.erro) {
+      const status = resultado.erro === 'NAO_INSCRITO' ? 403 : 422
+      return res
+        .status(status)
+        .json({ erro: resultado.erro, mensagem: 'Presença não pode ser registrada.' })
+    }
+    return res.status(resultado.jaExistia ? 200 : 201).json(resultado.presenca)
   })
   app.post('/atividades/:id/cancelamento', identificacao, organizacao, (req, res) => {
     const resultado = cancelarAtividade(req.params.id)
