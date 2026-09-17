@@ -240,4 +240,50 @@ describe('F5 — confirmacao', () => {
     assert.equal(res.status, 422)
     assert.equal((await res.json()).erro, 'CONVOCACAO_EXPIRADA')
   })
+
+  it('convocada com novo conflito E 4o minicurso recusa CONFLITO_DE_HORARIO, antes do limite', async () => {
+    await reset(port)
+    const mc1 = await criarAtividade(port, { salaId: 'sala-101', titulo: 'MC1', encontros: [
+      { inicio: '2026-10-19T09:00:00-03:00', fim: '2026-10-19T12:00:00-03:00' },
+      { inicio: '2026-10-19T14:00:00-03:00', fim: '2026-10-19T17:00:00-03:00' }
+    ] })
+    const mc2 = await criarAtividade(port, { salaId: 'sala-102', titulo: 'MC2', encontros: [
+      { inicio: '2026-10-20T09:00:00-03:00', fim: '2026-10-20T12:00:00-03:00' },
+      { inicio: '2026-10-20T14:00:00-03:00', fim: '2026-10-20T17:00:00-03:00' }
+    ] })
+    const mc3 = await criarAtividade(port, { salaId: 'lab-3', titulo: 'MC3', encontros: [
+      { inicio: '2026-10-21T09:00:00-03:00', fim: '2026-10-21T12:00:00-03:00' },
+      { inicio: '2026-10-21T14:00:00-03:00', fim: '2026-10-21T17:00:00-03:00' }
+    ] })
+    const mc4 = await criarAtividade(port, { salaId: 'auditorio', titulo: 'MC4', vagas: 1, encontros: [
+      { inicio: '2026-10-22T09:00:00-03:00', fim: '2026-10-22T12:00:00-03:00' },
+      { inicio: '2026-10-22T14:00:00-03:00', fim: '2026-10-22T17:00:00-03:00' }
+    ] })
+    const conflitante = await criarAtividade(port, {
+      titulo: 'Palestra que colide com MC4',
+      tipo: 'palestra',
+      salaId: 'sala-101',
+      encontros: [{ inicio: '2026-10-22T15:00:00-03:00', fim: '2026-10-22T16:00:00-03:00' }]
+    })
+    for (const atv of [mc1, mc2, mc3]) {
+      assert.equal((await inscrever(port, atv.id, 'p-diego')).status, 'confirmada')
+    }
+    const carlaEmMc4 = await inscrever(port, mc4.id, 'p-carla')
+    assert.equal(carlaEmMc4.status, 'confirmada')
+    const diegoEmMc4 = await inscrever(port, mc4.id, 'p-diego')
+    assert.equal(diegoEmMc4.status, 'em_espera')
+    const palestraEm = await inscrever(port, conflitante.id, 'p-diego')
+    assert.equal(palestraEm.status, 'confirmada')
+    await cancelarInscricao(port, carlaEmMc4.id, 'p-carla')
+    const res = await confirmar(port, diegoEmMc4.id, 'p-diego')
+    assert.equal(res.status, 409)
+    const body = await res.json()
+    assert.equal(body.erro, 'CONFLITO_DE_HORARIO')
+    const diegoDepois = await (
+      await fetch(`http://localhost:${port}/inscricoes`, {
+        headers: { 'X-Usuario': 'p-diego' }
+      })
+    ).json()
+    assert.equal(diegoDepois.find(i => i.atividadeId === mc4.id).status, 'convocada')
+  })
 })

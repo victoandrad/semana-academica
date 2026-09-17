@@ -340,7 +340,7 @@ Capacidade e lotação máxima (R10), conflito por encontro individual com 15 mi
 PATCH só `titulo`/`vagas` em `prevista` (R15), `CAMPO_NAO_EDITAVEL` para os demais e
 para campo fora do contrato (R16), ordem R18 (incluindo `ATIVIDADE_CANCELADA`),
 imutabilidade de encontros/sala e ids `enc_` (R34) e `titulo` sem restrição (R35).
-`VAGAS_ABAIXO_DOS_INSCRITOS` (R36) fica pendente de M2.
+`VAGAS_ABAIXO_DOS_INSCRITOS` (R36) é verificado com o M2 (M2 critério 17).
 
 **F5 — Cancelamento e situação** (R19, R20, R21, R22, R23, R24, R25)
 Cancelar antes de começar com borda inclusive (R20), `ATIVIDADE_JA_INICIADA` e
