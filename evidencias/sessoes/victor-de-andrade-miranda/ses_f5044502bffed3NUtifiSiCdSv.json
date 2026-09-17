@@ -1,0 +1,462 @@
+{
+ "info": {
+  "id": "ses_f5044502bffed3NUtifiSiCdSv",
+  "slug": "glowing-knight",
+  "projectID": "cbf5108e60a26b3873bb8ce01325422ff122ab1c",
+  "directory": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica",
+  "path": "",
+  "title": "Acrescentar regras de erro em AGENTS.md",
+  "agent": "build",
+  "model": {
+   "id": "big-pickle",
+   "providerID": "opencode"
+  },
+  "version": "1.18.31",
+  "summary": {
+   "additions": 0,
+   "deletions": 0,
+   "files": 0
+  },
+  "cost": 0,
+  "tokens": {
+   "input": 25033,
+   "output": 398,
+   "reasoning": 20,
+   "cache": {
+    "read": 29248,
+    "write": 0
+   }
+  },
+  "time": {
+   "created": 1789654708180,
+   "updated": 1789654752716
+  }
+ },
+ "messages": [
+  {
+   "info": {
+    "role": "user",
+    "time": {
+     "created": 1789654708219
+    },
+    "agent": "build",
+    "model": {
+     "providerID": "opencode",
+     "modelID": "big-pickle"
+    },
+    "summary": {
+     "diffs": [
+      {
+       "file": "AGENTS.md",
+       "patch": "Index: AGENTS.md\n===================================================================\n--- AGENTS.md\t\n+++ AGENTS.md\t\n@@ -1,43 +1,44 @@\n # AGENTS.md — Semana Acadêmica\n \n Regras que o agente de IA deve seguir neste repositório. Cada linha tem uma justificativa com fonte.\n \n ## Stack e pastas\n \n - A API fica em `api/`: Node 22 + Express + `node:sqlite`, com `npm install` e `npm start`. — `projeto.json:2-8`\n - A interface web fica em `app/`: HTML + JS, com `npm install` e `npm run dev`. — `projeto.json:9-13`\n - Testes rodam com `node --test` (Node built-in). — `.opencode/skills/tdd/SKILL.md:21`\n \n ## Contrato\n \n - `contrato-api.md` é imutável: rota, nome de campo e código de retorno não se negociam. — `contrato-api.md:3` (\"Restrição do cliente\")\n - Toda regra de tempo usa o relógio do modo de teste (`PUT /_teste/relogio`), nunca a hora do sistema. — `contrato-api.md:51` (\"Toda regra que depende de tempo usa esse relógio — nunca a hora do sistema direto.\")\n - A ordem das verificações é: identificação (401) → perfil (403) → existência (404) → corpo (422) → regras do recurso. — `contrato-api.md:17`\n \n ## Método\n \n - `specs/` e `entrevistas/` são a fonte da verdade. Nenhuma regra entra na spec sem a pergunta P-xx que a originou. — `.opencode/skills/to-spec/SKILL.md:11-12` (\"Regra que ninguém decidiu não entra.\") e `.opencode/agent/auditor.md:36` (auditor confere origem P-xx de cada regra)\n - Todo teste começa vermelho antes do código existir. — `.opencode/skills/tdd/SKILL.md:30-31`\n - Teste que nasce verde ou é alterado para passar é teste inválido. — `.opencode/skills/tdd/SKILL.md:40-43` (\"Se você mudar um teste para ele passar, você trocou o contrato pela sua implementação\")\n \n ## Documento de requisitos\n \n - Existe um documento de requisitos fora do repositório. Não procure, não leia, não anexe à conversa, não peça ao agente para ler. — `README.md:36-37`\n \n ## Commits\n \n - Formato da mensagem de commit: `M2-R6: recusa conflito de horário` — `<módulo>-<regra>: <descrição curta>`. — enunciado da disciplina\n \n ## Auditorias\n \n - Pareceres em `auditorias/` são salvos inteiros, sem edição. — `README.md:25`\n \n ## Equipe\n \n - Victor é dono de M1 (grade de atividades) e M2 (inscrições). — `EQUIPE.md:7-8`\n - Felipe é dono de M3 (presença por QR). — `EQUIPE.md:9`\n - Infraestrutura da API é responsabilidade de Felipe. — `EQUIPE.md:9` + `projeto.json:3-8`\n \n ## Regras que nasceram de erro\n \n-<!-- Cada linha: data, descrição do erro, regra que nasceu. -->\n+- 2026-09-17: agente corrigiu typo em spec durante implementação sem perguntar. Regra: durante implementação, o agente não altera a spec — se código não bate, ele para e pergunta ao dono do módulo; alteração de spec é commit separado do código.\n+- 2026-09-17: spec de M0 inventou rotas fora do contrato (health check e rota temporária de teste). Regra: nenhuma rota fora de contrato-api.md entra no código, nem como costura de teste — testes usam rotas do contrato.\n",
+       "additions": 2,
+       "deletions": 1,
+       "status": "modified"
+      }
+     ]
+    },
+    "id": "msg_0afbbaffb001fq6RGEp05bZnD6",
+    "sessionID": "ses_f5044502bffed3NUtifiSiCdSv"
+   },
+   "parts": [
+    {
+     "type": "text",
+     "text": "Edite AGENTS.md. Acrescente duas linhas na seção \"Regras que nasceram de erro\", que\nestá vazia. Não mexa em nenhuma outra seção e não reescreva o que já existe.\n\nOs dois erros aconteceram hoje, 2026-09-17, durante a implementação da infraestrutura\n(módulo M0):\n\n1. Implementando a fatia 1, o agente encontrou um typo em specs/M0-infraestrutura.md\n   (\"padrão 000\" onde a regra R1 dizia 3000) e corrigiu sozinho, no meio da\n   implementação, sem perguntar. A correção estava certa, mas a decisão não era dele: se\n   o agente pode ajustar a spec quando o código não bate, a spec deixa de ser a verdade.\n   Regra que nasce daí: durante a implementação, o agente não altera a spec. Se o código\n   não bate com a spec, ele para e pergunta ao dono do módulo. Alteração de spec é\n   decisão do dono, em commit separado do commit de código.\n\n2. A seção 8 de specs/M0-infraestrutura.md inventou duas rotas que não existem no\n   contrato-api.md: uma rota de health check na fatia 1 e uma \"rota temporária de teste\"\n   na fatia 2 — sendo que a seção 6 da mesma spec já provava as duas coisas com\n   GET /salas e PUT /_teste/relogio, que são rotas do contrato. As duas rotas inventadas\n   foram removidas na fatia 3.\n   Regra que nasce daí: nenhuma rota fora do contrato-api.md entra no código, nem como\n   costura de teste. Quando um teste precisar de uma rota para provar alguma coisa, use\n   uma rota do contrato.\n\nEscreva cada uma como uma linha de lista no formato que o comentário HTML da seção\nindica: data, o erro em uma frase, a regra que nasceu. Seja direto, sem adjetivo e sem\nexplicar a importância da regra. Não invente uma terceira regra.\n\nDepois de gravar, apague o comentário HTML da seção, que era só instrução de formato. ",
+     "id": "prt_0afbbaffe0015JdVy48320yHt4",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbbaffb001fq6RGEp05bZnD6"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0afbbaffb001fq6RGEp05bZnD6",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica",
+     "root": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 12578,
+     "input": 10728,
+     "output": 58,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 1792
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789654708251,
+     "completed": 1789654729310
+    },
+    "finish": "tool-calls",
+    "id": "msg_0afbbb01b001uRvpNltPP8Jcba",
+    "sessionID": "ses_f5044502bffed3NUtifiSiCdSv"
+   },
+   "parts": [
+    {
+     "snapshot": "6cfd45712bb589320538cdcc8f890ed6abcf6bdc",
+     "type": "step-start",
+     "id": "prt_0afbbfef60017Bji7dVkGN8EaM",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbbb01b001uRvpNltPP8Jcba"
+    },
+    {
+     "type": "reasoning",
+     "text": "Let me read the AGENTS.md file first to see the current state.",
+     "time": {
+      "start": 1789654728500,
+      "end": 1789654728752
+     },
+     "id": "prt_0afbbff34001CrZOGXo0lKQV19",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbbb01b001uRvpNltPP8Jcba"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_6ded4bef350c44538df2e294",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md"
+      },
+      "output": "[2616 caracteres omitidos]",
+      "title": "AGENTS.md",
+      "time": {
+       "start": 1789654728902,
+       "end": 1789654728939
+      }
+     },
+     "id": "prt_0afbc0033001yAhQTgaz6iBS70",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbbb01b001uRvpNltPP8Jcba"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "6cfd45712bb589320538cdcc8f890ed6abcf6bdc",
+     "type": "step-finish",
+     "tokens": {
+      "total": 12578,
+      "input": 10728,
+      "output": 58,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 1792
+      }
+     },
+     "cost": 0,
+     "id": "prt_0afbc019700140Pe6M8QuvcyiS",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbbb01b001uRvpNltPP8Jcba"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0afbbaffb001fq6RGEp05bZnD6",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica",
+     "root": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 13818,
+     "input": 1072,
+     "output": 266,
+     "reasoning": 0,
+     "cache": {
+      "write": 0,
+      "read": 12480
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789654729314,
+     "completed": 1789654743389
+    },
+    "finish": "tool-calls",
+    "id": "msg_0afbc0262001WuzrQ1gp2JRnSn",
+    "sessionID": "ses_f5044502bffed3NUtifiSiCdSv"
+   },
+   "parts": [
+    {
+     "snapshot": "6cfd45712bb589320538cdcc8f890ed6abcf6bdc",
+     "type": "step-start",
+     "id": "prt_0afbc2b34001a8kdJIVsu02Izh",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc0262001WuzrQ1gp2JRnSn"
+    },
+    {
+     "type": "reasoning",
+     "text": "Now I need to add two bullet points after line 43 and remove the HTML comment on line 43.",
+     "time": {
+      "start": 1789654739819,
+      "end": 1789654740166
+     },
+     "id": "prt_0afbc2b6b001wWEPxVk356PHaH",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc0262001WuzrQ1gp2JRnSn"
+    },
+    {
+     "type": "tool",
+     "tool": "edit",
+     "callID": "call_8333d72f438d4996be581366",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md",
+       "oldString": "## Regras que nasceram de erro\n\n<!-- Cada linha: data, descrição do erro, regra que nasceu. -->",
+       "newString": "## Regras que nasceram de erro\n\n- 2026-09-17: agente corrigiu typo em spec durante implementação sem perguntar. Regra: durante implementação, o agente não altera a spec — se código não bate, ele para e pergunta ao dono do módulo; alteração de spec é commit separado do código.\n- 2026-09-17: spec de M0 inventou rotas fora do contrato (health check e rota temporária de teste). Regra: nenhuma rota fora de contrato-api.md entra no código, nem como costura de teste — testes usam rotas do contrato."
+      },
+      "output": "Edit applied successfully.",
+      "metadata": {
+       "diagnostics": {},
+       "diff": "Index: C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md\n===================================================================\n--- C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md\n+++ C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md\n@@ -39,5 +39,6 @@\n - Infraestrutura da API é responsabilidade de Felipe. — `EQUIPE.md:9` + `projeto.json:3-8`\n \n ## Regras que nasceram de erro\n \n-<!-- Cada linha: data, descrição do erro, regra que nasceu. -->\n+- 2026-09-17: agente corrigiu typo em spec durante implementação sem perguntar. Regra: durante implementação, o agente não altera a spec — se código não bate, ele para e pergunta ao dono do módulo; alteração de spec é commit separado do código.\n+- 2026-09-17: spec de M0 inventou rotas fora do contrato (health check e rota temporária de teste). Regra: nenhuma rota fora de contrato-api.md entra no código, nem como costura de teste — testes usam rotas do contrato.\n",
+       "filediff": {
+        "file": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md",
+        "patch": "Index: C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md\n===================================================================\n--- C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md\n+++ C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md\n@@ -39,5 +39,6 @@\n - Infraestrutura da API é responsabilidade de Felipe. — `EQUIPE.md:9` + `projeto.json:3-8`\n \n ## Regras que nasceram de erro\n \n-<!-- Cada linha: data, descrição do erro, regra que nasceu. -->\n+- 2026-09-17: agente corrigiu typo em spec durante implementação sem perguntar. Regra: durante implementação, o agente não altera a spec — se código não bate, ele para e pergunta ao dono do módulo; alteração de spec é commit separado do código.\n+- 2026-09-17: spec de M0 inventou rotas fora do contrato (health check e rota temporária de teste). Regra: nenhuma rota fora de contrato-api.md entra no código, nem como costura de teste — testes usam rotas do contrato.\n",
+        "additions": 2,
+        "deletions": 1
+       },
+       "truncated": false
+      },
+      "title": "AGENTS.md",
+      "time": {
+       "start": 1789654742556,
+       "end": 1789654742590
+      }
+     },
+     "id": "prt_0afbc2cc9001sqFwUWsNYPoE9o",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc0262001WuzrQ1gp2JRnSn"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "14ea2b0e03fe3ca6f543831b1be53c18f60e40a7",
+     "type": "step-finish",
+     "tokens": {
+      "total": 13818,
+      "input": 1072,
+      "output": 266,
+      "reasoning": 0,
+      "cache": {
+       "write": 0,
+       "read": 12480
+      }
+     },
+     "cost": 0,
+     "id": "prt_0afbc380d001QkPYekT1hyZxfa",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc0262001WuzrQ1gp2JRnSn"
+    },
+    {
+     "type": "patch",
+     "hash": "6cfd45712bb589320538cdcc8f890ed6abcf6bdc",
+     "files": [
+      "C:/Users/victo/Documents/Repositórios/semana-academica/AGENTS.md"
+     ],
+     "id": "prt_0afbc3957001avAOnyRhJyeaL0",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc0262001WuzrQ1gp2JRnSn"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0afbbaffb001fq6RGEp05bZnD6",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica",
+     "root": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 14024,
+     "input": 12933,
+     "output": 58,
+     "reasoning": 9,
+     "cache": {
+      "write": 0,
+      "read": 1024
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789654743397,
+     "completed": 1789654749212
+    },
+    "finish": "tool-calls",
+    "id": "msg_0afbc3965001MvQWXoB1sbM9IJ",
+    "sessionID": "ses_f5044502bffed3NUtifiSiCdSv"
+   },
+   "parts": [
+    {
+     "snapshot": "14ea2b0e03fe3ca6f543831b1be53c18f60e40a7",
+     "type": "step-start",
+     "id": "prt_0afbc454e001AiyhkjK5G8bbod",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc3965001MvQWXoB1sbM9IJ"
+    },
+    {
+     "type": "reasoning",
+     "text": "Done. Let me verify the result.",
+     "time": {
+      "start": 1789654746607,
+      "end": 1789654746797
+     },
+     "id": "prt_0afbc45ef001gBGQURkC9Ca6Hw",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc3965001MvQWXoB1sbM9IJ"
+    },
+    {
+     "type": "text",
+     "text": "Feito. Resultado:",
+     "time": {
+      "start": 1789654746799,
+      "end": 1789654748767
+     },
+     "id": "prt_0afbc46af001rrsEpGYxGRdeg6",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc3965001MvQWXoB1sbM9IJ"
+    },
+    {
+     "type": "tool",
+     "tool": "read",
+     "callID": "call_376184ab983049549a9f1e31",
+     "state": {
+      "status": "completed",
+      "input": {
+       "filePath": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica\\AGENTS.md",
+       "offset": 41
+      },
+      "output": "[661 caracteres omitidos]",
+      "title": "AGENTS.md",
+      "time": {
+       "start": 1789654748403,
+       "end": 1789654748422
+      }
+     },
+     "id": "prt_0afbc484d001sfI20pn4BTKxNL",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc3965001MvQWXoB1sbM9IJ"
+    },
+    {
+     "reason": "tool-calls",
+     "snapshot": "14ea2b0e03fe3ca6f543831b1be53c18f60e40a7",
+     "type": "step-finish",
+     "tokens": {
+      "total": 14024,
+      "input": 12933,
+      "output": 58,
+      "reasoning": 9,
+      "cache": {
+       "write": 0,
+       "read": 1024
+      }
+     },
+     "cost": 0,
+     "id": "prt_0afbc4f1d00150iyUJ6oaPISVN",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc3965001MvQWXoB1sbM9IJ"
+    }
+   ]
+  },
+  {
+   "info": {
+    "parentID": "msg_0afbbaffb001fq6RGEp05bZnD6",
+    "role": "assistant",
+    "mode": "build",
+    "agent": "build",
+    "path": {
+     "cwd": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica",
+     "root": "C:\\Users\\victo\\Documents\\Repositórios\\semana-academica"
+    },
+    "cost": 0,
+    "tokens": {
+     "total": 14279,
+     "input": 300,
+     "output": 16,
+     "reasoning": 11,
+     "cache": {
+      "write": 0,
+      "read": 13952
+     }
+    },
+    "modelID": "big-pickle",
+    "providerID": "opencode",
+    "time": {
+     "created": 1789654749216,
+     "completed": 1789654752693
+    },
+    "finish": "stop",
+    "id": "msg_0afbc5020001f3ivtmPKTbRFRy",
+    "sessionID": "ses_f5044502bffed3NUtifiSiCdSv"
+   },
+   "parts": [
+    {
+     "snapshot": "14ea2b0e03fe3ca6f543831b1be53c18f60e40a7",
+     "type": "step-start",
+     "id": "prt_0afbc578d0015YcIsIgMxOKXIx",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc5020001f3ivtmPKTbRFRy"
+    },
+    {
+     "type": "reasoning",
+     "text": "Done. Two lines added, HTML comment removed.",
+     "time": {
+      "start": 1789654751196,
+      "end": 1789654752245
+     },
+     "id": "prt_0afbc57dc001lkQmSLdcS26me1",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc5020001f3ivtmPKTbRFRy"
+    },
+    {
+     "type": "text",
+     "text": "Duas linhas adicionadas e o comentário HTML removido.",
+     "time": {
+      "start": 1789654752248,
+      "end": 1789654752333
+     },
+     "id": "prt_0afbc5bf70014Q9aT49ly2IQ3K",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc5020001f3ivtmPKTbRFRy"
+    },
+    {
+     "reason": "stop",
+     "snapshot": "14ea2b0e03fe3ca6f543831b1be53c18f60e40a7",
+     "type": "step-finish",
+     "tokens": {
+      "total": 14279,
+      "input": 300,
+      "output": 16,
+      "reasoning": 11,
+      "cache": {
+       "write": 0,
+       "read": 13952
+      }
+     },
+     "cost": 0,
+     "id": "prt_0afbc5d00001YcOXp5Bla0JeHD",
+     "sessionID": "ses_f5044502bffed3NUtifiSiCdSv",
+     "messageID": "msg_0afbc5020001f3ivtmPKTbRFRy"
+    }
+   ]
+  }
+ ]
+}
