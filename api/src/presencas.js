@@ -69,9 +69,10 @@ function codigoEhValido(encontroId, codigo, instante) {
   ) {
     return false
   }
-  const ms = Date.parse(instante)
-  const atual = codigoDoMinuto(encontroId, new Date(ms).toISOString())
-  const anterior = codigoDoMinuto(encontroId, new Date(ms - MINUTO).toISOString())
+  // Só códigos já emitidos valem: o minuto anterior sem GET não tem código.
+  const minuto = minutoDe(instante)
+  const atual = codigos.get(`${encontroId}:${minuto}`)
+  const anterior = codigos.get(`${encontroId}:${minuto - 1}`)
   return normalizado === atual || normalizado === anterior
 }
 
