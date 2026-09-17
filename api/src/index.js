@@ -10,15 +10,26 @@ import {
   cancelarAtividade,
   resetAtividades
 } from './atividades.js'
+import {
+  inscrever,
+  listarInscricoes,
+  buscarInscricao,
+  cancelarInscricao,
+  confirmarInscricao,
+  resetInscricoes
+} from './inscricoes.js'
 import { setRelogio, lerRelogio, resetRelogio } from './relogio.js'
 
 const usuarioDesconhecido = 'USUARIO_DESCONHECIDO'
 const dadosInvalidos = 'DADOS_INVALIDOS'
 const somenteOrganizacao = 'SOMENTE_ORGANIZACAO'
+const somenteParticipante = 'SOMENTE_PARTICIPANTE'
 
 const statusDoErro = {
   CONFLITO_DE_SALA: 409,
-  VAGAS_ABAIXO_DOS_INSCRITOS: 409
+  VAGAS_ABAIXO_DOS_INSCRITOS: 409,
+  JA_INSCRITO: 409,
+  CONFLITO_DE_HORARIO: 409
 }
 
 function identificacao(req, res, next) {
@@ -36,6 +47,15 @@ function organizacao(req, res, next) {
     return res
       .status(403)
       .json({ erro: somenteOrganizacao, mensagem: 'Apenas organização.' })
+  }
+  next()
+}
+
+function participante(req, res, next) {
+  if (papelDe(req.header('X-Usuario')) !== 'participante') {
+    return res
+      .status(403)
+      .json({ erro: somenteParticipante, mensagem: 'Apenas participante.' })
   }
   next()
 }
@@ -111,6 +131,61 @@ export function createApp() {
     }
     return res.status(200).json(resultado)
   })
+  app.post('/atividades/:id/inscricoes', identificacao, participante, (req, res) => {
+    const resultado = inscrever(req.params.id, req.header('X-Usuario'))
+    if (resultado && resultado.erro === 'NAO_ENCONTRADO') {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Atividade não encontrada.' })
+    }
+    if (resultado && resultado.erro) {
+      return res
+        .status(statusDoErro[resultado.erro] ?? 422)
+        .json({ erro: resultado.erro, mensagem: 'Inscrição não pode ser feita.' })
+    }
+    return res.status(201).json(resultado)
+  })
+  app.get('/inscricoes', identificacao, (req, res) => {
+    const xUsuario = req.header('X-Usuario')
+    return res.status(200).json(listarInscricoes(xUsuario, papelDe(xUsuario), req.query))
+  })
+  app.get('/inscricoes/:id', identificacao, (req, res) => {
+    const inscricao = buscarInscricao(req.params.id)
+    if (!inscricao) {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Inscrição não encontrada.' })
+    }
+    return res.status(200).json(inscricao)
+  })
+  app.post('/inscricoes/:id/cancelamento', identificacao, participante, (req, res) => {
+    const resultado = cancelarInscricao(req.params.id, req.header('X-Usuario'))
+    if (resultado && resultado.erro === 'NAO_ENCONTRADO') {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Inscrição não encontrada.' })
+    }
+    if (resultado && resultado.erro) {
+      return res
+        .status(statusDoErro[resultado.erro] ?? 422)
+        .json({ erro: resultado.erro, mensagem: 'Inscrição não pode ser cancelada.' })
+    }
+    return res.status(200).json(resultado)
+  })
+  app.post('/inscricoes/:id/confirmacao', identificacao, participante, (req, res) => {
+    const resultado = confirmarInscricao(req.params.id, req.header('X-Usuario'))
+    if (resultado && resultado.erro === 'NAO_ENCONTRADO') {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Inscrição não encontrada.' })
+    }
+    if (resultado && resultado.erro) {
+      return res
+        .status(statusDoErro[resultado.erro] ?? 422)
+        .json({ erro: resultado.erro, mensagem: 'Inscrição não pode ser confirmada.' })
+    }
+    return res.status(200).json(resultado)
+  })
   if (process.env.MODO_TESTE === '1') {
     app.put('/_teste/relogio', (req, res) => {
       setRelogio(req.body.agora)
@@ -123,6 +198,7 @@ export function createApp() {
       resetRelogio()
       resetSalas()
       resetAtividades()
+      resetInscricoes()
       res.status(204).end()
     })
   }

@@ -1,5 +1,10 @@
 import { salaExiste, capacidadeDe } from './salas.js'
 import { agora } from './relogio.js'
+import {
+  processarEsperaDa,
+  contadoresDe,
+  cancelarInscricoesDaAtividade
+} from './inscricoes.js'
 
 let atividades = []
 
@@ -86,7 +91,14 @@ function situacaoDa(atividade) {
 }
 
 function formatar(atividade) {
-  return { ...atividade, situacao: situacaoDa(atividade) }
+  const { ocupadas, emEspera } = contadoresDe(atividade.id)
+  return {
+    ...atividade,
+    situacao: situacaoDa(atividade),
+    ocupadas,
+    vagasRestantes: atividade.vagas - ocupadas,
+    emEspera
+  }
 }
 
 function encontrosConflitam(a, b) {
@@ -205,12 +217,16 @@ export function alterarAtividade(id, dados) {
   if ('vagas' in dados && dados.vagas > capacidadeDe(atividade.salaId)) {
     return { erro: 'VAGAS_ACIMA_DA_CAPACIDADE' }
   }
+  if ('vagas' in dados && dados.vagas < contadoresDe(atividade.id).ocupadas) {
+    return { erro: 'VAGAS_ABAIXO_DOS_INSCRITOS' }
+  }
   if ('vagas' in dados) {
     atividade.vagas = dados.vagas
   }
   if ('titulo' in dados) {
     atividade.titulo = dados.titulo
   }
+  processarEsperaDa(atividade.id)
   return formatar(atividade)
 }
 
@@ -226,6 +242,7 @@ export function cancelarAtividade(id) {
     return { erro: 'ATIVIDADE_JA_INICIADA' }
   }
   atividade.cancelada = true
+  cancelarInscricoesDaAtividade(atividade.id)
   return formatar(atividade)
 }
 
