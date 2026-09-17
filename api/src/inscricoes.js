@@ -15,7 +15,7 @@ export function inscrever(atividadeId, participanteId) {
   if (!atividade) {
     return { erro: 'NAO_ENCONTRADO' }
   }
-  if (atividade.cancelada) {
+  if (atividade.situacao === 'cancelada') {
     return { erro: 'ATIVIDADE_CANCELADA' }
   }
   const FECHAM_ANTES = 30 * 60 * 1000
@@ -255,7 +255,7 @@ function convocadaAtePara(atividade, instanteBase) {
 
 export function processarEsperaDa(atividadeId) {
   const atividade = buscarAtividade(atividadeId)
-  if (!atividade || atividade.cancelada) {
+  if (!atividade || atividade.situacao === 'cancelada') {
     return
   }
   let baseDaProxima = null

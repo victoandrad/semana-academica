@@ -93,7 +93,13 @@ function situacaoDa(atividade) {
 function formatar(atividade) {
   const { ocupadas, emEspera } = contadoresDe(atividade.id)
   return {
-    ...atividade,
+    id: atividade.id,
+    titulo: atividade.titulo,
+    tipo: atividade.tipo,
+    salaId: atividade.salaId,
+    vagas: atividade.vagas,
+    encontros: atividade.encontros,
+    cargaHorariaMinutos: atividade.cargaHorariaMinutos,
     situacao: situacaoDa(atividade),
     ocupadas,
     vagasRestantes: atividade.vagas - ocupadas,
