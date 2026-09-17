@@ -11,6 +11,10 @@ export function listarSalas() {
   return dados
 }
 
+export function salaExiste(id) {
+  return dados.some(s => s.id === id)
+}
+
 export function resetSalas() {
   dados = [...salasIniciais]
 }

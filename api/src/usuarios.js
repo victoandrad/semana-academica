@@ -14,3 +14,7 @@ export const usuarios = [
 export function usuarioExiste(id) {
   return usuarios.some(u => u.id === id)
 }
+
+export function papelDe(id) {
+  return usuarios.find(u => u.id === id).papel
+}
