@@ -1,8 +1,11 @@
 import { criarApi } from './api.js'
+import { render as renderCodigoDoEncontro } from './telas/codigo-do-encontro.js'
 
 // As telas de cada módulo se registram aqui: { rota, titulo, render }.
 // render(container, { api, agora }) — ver .opencode/skills/nova-tela/SKILL.md
-const telas = []
+const telas = [
+  { rota: 'codigo-do-encontro', titulo: 'Código do encontro', render: renderCodigoDoEncontro }
+]
 
 const seletor = document.querySelector('#usuario')
 const api = criarApi({ fetch: (...a) => fetch(...a), usuario: () => seletor.value })
