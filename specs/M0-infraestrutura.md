@@ -145,18 +145,22 @@ status e corpo da resposta. A costura é a HTTP — a mesma que o juiz usa.
 
 ## 8. Fatias de entrega
 
-**F1 — Servidor sobe e responde na porta certa**
-Levantar Express, ler `PORT` do ambiente (padrão 3000), e responder 200 em uma rota
-de health check. Verificar que a API inicia sem erro.
+**F1 — Servidor sobe na porta certa**
+Levantar Express e ler `PORT` do ambiente (padrão 3000). Verificar que a API inicia
+sem erro. A prova de subida é o próprio teste de `GET /salas` (F3) — não há rota de
+health check fora do contrato.
 
 **F2 — Formato de erro e identificação**
 Criar middleware de identificação que lê `X-Usuario`, valida existência, e devolve
-401 `USUARIO_DESCONHECIDO` conforme R4/R6. Fazer uma rota temporária de teste para
-comprovar o 401. Validar que corpo não-JSON devolve 422 `DADOS_INVALIDOS` (R5).
+401 `USUARIO_DESCONHECIDO` conforme R4/R6. A prova do 401 é feita contra `GET /salas`
+(F3), sem rota temporária. A validação de corpo não-JSON → 422 `DADOS_INVALIDOS`
+(R5) é comprovada em F4 contra `PUT /_teste/relogio` — a primeira rota do contrato
+que recebe corpo.
 
 **F3 — Dados iniciais e GET /salas**
 Carregar os 10 usuários e 4 salas no startup do banco. Implementar `GET /salas`
-retornando 200 com o array. Validar que as 4 salas aparecem.
+retornando 200 com o array. Este teste também comprova o 401 (R4/R6) e a subida
+do servidor (R1).
 
 **F4 — Rotas de teste e relógio congelado**
 Implementar `POST /_teste/reset` (204, recarrega dados, poe relógio em 09:00),
