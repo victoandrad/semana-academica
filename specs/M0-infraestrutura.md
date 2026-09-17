@@ -168,5 +168,8 @@ Implementar `POST /_teste/reset` (204, recarrega dados, poe relógio em 09:00),
 rotas retornam 404. Validar que o relógio só avança com PUT.
 
 **F5 — Reset integra**
-Criar atividade via rota auxiliar (ou manipulação direta), chamar `POST /_teste/reset`,
-confirmar que a atividade sumiu e que os dados iniciais retornaram intactos.
+Pendente: depende de `POST /atividades` (M1), que ainda não existe. Quando M1
+entregar essa rota, o teste desta fatia vai criar uma atividade, chamar
+`POST /_teste/reset` e confirmar que a atividade sumiu e que os dados iniciais
+retornaram intactos. A parte de restauração dos dados iniciais já está comprovada
+pelo teste de F4 em `api/test/modo-teste.test.js`.
