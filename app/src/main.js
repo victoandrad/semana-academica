@@ -1,10 +1,12 @@
 import { criarApi } from './api.js'
 import { render as renderCodigoDoEncontro } from './telas/codigo-do-encontro.js'
+import { render as renderRegistrarPresenca } from './telas/registrar-presenca.js'
 
 // As telas de cada módulo se registram aqui: { rota, titulo, render }.
 // render(container, { api, agora }) — ver .opencode/skills/nova-tela/SKILL.md
 const telas = [
-  { rota: 'codigo-do-encontro', titulo: 'Código do encontro', render: renderCodigoDoEncontro }
+  { rota: 'codigo-do-encontro', titulo: 'Código do encontro', render: renderCodigoDoEncontro },
+  { rota: 'registrar-presenca', titulo: 'Registrar presença (QR)', render: renderRegistrarPresenca }
 ]
 
 const seletor = document.querySelector('#usuario')
