@@ -1,6 +1,7 @@
 import express from 'express'
 import { pathToFileURL } from 'node:url'
 import { usuarioExiste } from './usuarios.js'
+import { listarSalas } from './salas.js'
 
 const usuarioDesconhecido = 'USUARIO_DESCONHECIDO'
 
@@ -14,24 +15,10 @@ function identificacao(req, res, next) {
   next()
 }
 
-function dadosInvalidos(err, _req, res, _next) {
-  if (err) {
-    return res
-      .status(422)
-      .json({ erro: 'DADOS_INVALIDOS', mensagem: 'Corpo deve ser JSON válido.' })
-  }
-  _next()
-}
-
 export function createApp() {
   const app = express()
-  app.get('/', (_req, res) => res.status(200).end())
-  app.get('/teste-protegida', identificacao, (_req, res) => res.status(200).end())
-  app.post(
-    '/teste-body',
-    express.json({ type: '*/*' }),
-    dadosInvalidos,
-    (_req, res) => res.status(200).end()
+  app.get('/salas', identificacao, (_req, res) =>
+    res.status(200).json(listarSalas())
   )
   return app
 }
