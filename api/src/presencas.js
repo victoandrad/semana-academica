@@ -130,6 +130,17 @@ export function registrarPresencaManual(encontrado, participanteId, justificativ
   return { presenca, jaExistia: false }
 }
 
+// R19: da fatia F5 — ordem crescente de registradaEm; empate por id.
+export function listarPresencas(encontroId) {
+  return presencas
+    .filter(p => p.encontroId === encontroId)
+    .sort(
+      (a, b) =>
+        Date.parse(a.registradaEm) - Date.parse(b.registradaEm) || a.id.localeCompare(b.id)
+    )
+    .map(p => ({ ...p }))
+}
+
 export function resetPresencas() {
   codigos = new Map()
   presencas = []

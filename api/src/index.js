@@ -19,7 +19,7 @@ import {
   resetInscricoes
 } from './inscricoes.js'
 import { setRelogio, lerRelogio, resetRelogio, agora } from './relogio.js'
-import { buscarEncontro, dentroDaJanela, codigoDoMinuto, trocaDeCodigo, registrarPresenca, registrarPresencaManual, resetPresencas } from './presencas.js'
+import { buscarEncontro, dentroDaJanela, codigoDoMinuto, trocaDeCodigo, registrarPresenca, registrarPresencaManual, listarPresencas, resetPresencas } from './presencas.js'
 
 const usuarioDesconhecido = 'USUARIO_DESCONHECIDO'
 const dadosInvalidos = 'DADOS_INVALIDOS'
@@ -205,6 +205,15 @@ export function createApp() {
         .json({ erro: resultado.erro, mensagem: 'Presença não pode ser registrada.' })
     }
     return res.status(resultado.jaExistia ? 200 : 201).json(resultado.presenca)
+  })
+  app.get('/encontros/:id/presencas', identificacao, organizacao, (req, res) => {
+    const encontrado = buscarEncontro(req.params.id)
+    if (!encontrado) {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Encontro não encontrado.' })
+    }
+    return res.status(200).json(listarPresencas(encontrado.encontro.id))
   })
   app.post('/atividades/:id/cancelamento', identificacao, organizacao, (req, res) => {
     const resultado = cancelarAtividade(req.params.id)
