@@ -184,15 +184,23 @@ function iniciarScanner(aoLer) {
         if (tocar?.catch) tocar.catch(() => {})
       } catch {}
       const detector = new Detector()
+      // O mesmo QR fica na frente da câmera por vários frames: registra uma vez
+      // por conteúdo e espera entre leituras, para não disparar um POST por frame.
+      let ultimo = null
+      const proximo = () => { if (!parado) setTimeout(ler, 500) }
       const ler = () => {
         if (parado) return
         detector.detect(video)
           .then((leituras = []) => {
             if (parado) return
-            for (const leitura of leituras) aoLer(leitura.rawValue)
-            ler()
+            for (const leitura of leituras) {
+              if (leitura.rawValue === ultimo) continue
+              ultimo = leitura.rawValue
+              aoLer(leitura.rawValue)
+            }
+            proximo()
           })
-          .catch(() => ler())
+          .catch(proximo)
       }
       ler()
     })
