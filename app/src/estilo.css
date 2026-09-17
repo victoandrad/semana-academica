@@ -1,0 +1,8 @@
+:root { font-family: system-ui, sans-serif; color-scheme: light dark; }
+body { margin: 0; }
+header { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; padding: .75rem 1rem; border-bottom: 1px solid #8884; }
+header h1 { font-size: 1.1rem; margin: 0; }
+nav a { margin-right: .75rem; }
+main { padding: 1rem; max-width: 60rem; margin: 0 auto; }
+.erro { border: 1px solid #c33; background: #c331; padding: .5rem .75rem; border-radius: .25rem; }
+.erro code { font-weight: bold; }
