@@ -18,7 +18,8 @@ import {
   confirmarInscricao,
   resetInscricoes
 } from './inscricoes.js'
-import { setRelogio, lerRelogio, resetRelogio } from './relogio.js'
+import { setRelogio, lerRelogio, resetRelogio, agora } from './relogio.js'
+import { buscarEncontro, dentroDaJanela, codigoDoMinuto, trocaDeCodigo, resetPresencas } from './presencas.js'
 
 const usuarioDesconhecido = 'USUARIO_DESCONHECIDO'
 const dadosInvalidos = 'DADOS_INVALIDOS'
@@ -117,6 +118,31 @@ export function createApp() {
     }
     return res.status(200).json(resultado)
   })
+  app.get('/encontros/:id/codigo', identificacao, organizacao, (req, res) => {
+    const encontrado = buscarEncontro(req.params.id)
+    if (!encontrado) {
+      return res
+        .status(404)
+        .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Encontro não encontrado.' })
+    }
+    const { atividade, encontro } = encontrado
+    if (atividade.situacao === 'cancelada') {
+      return res
+        .status(422)
+        .json({ erro: 'ATIVIDADE_CANCELADA', mensagem: 'Atividade cancelada.' })
+    }
+    const instante = agora()
+    if (!dentroDaJanela(instante, encontro.inicio)) {
+      return res
+        .status(422)
+        .json({ erro: 'FORA_DA_JANELA', mensagem: 'Fora da janela de presença.' })
+    }
+    return res.status(200).json({
+      encontroId: encontro.id,
+      codigo: codigoDoMinuto(encontro.id, instante),
+      ...trocaDeCodigo(instante)
+    })
+  })
   app.post('/atividades/:id/cancelamento', identificacao, organizacao, (req, res) => {
     const resultado = cancelarAtividade(req.params.id)
     if (resultado && resultado.erro === 'NAO_ENCONTRADO') {
@@ -199,6 +225,7 @@ export function createApp() {
       resetSalas()
       resetAtividades()
       resetInscricoes()
+      resetPresencas()
       res.status(204).end()
     })
   }
