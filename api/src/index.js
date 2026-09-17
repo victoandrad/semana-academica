@@ -58,6 +58,11 @@ export function createApp() {
         .status(404)
         .json({ erro: 'NAO_ENCONTRADO', mensagem: 'Sala não encontrada.' })
     }
+    if (atividade && atividade.erro) {
+      return res
+        .status(422)
+        .json({ erro: atividade.erro, mensagem: 'Atividade não pode ser criada.' })
+    }
     if (!atividade) {
       return res
         .status(422)

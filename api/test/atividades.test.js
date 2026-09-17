@@ -79,7 +79,7 @@ describe('F1 — criar e ler atividade', () => {
       headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },
       body: JSON.stringify({
         titulo: 'Flutter do zero',
-        tipo: 'minicurso',
+        tipo: 'palestra',
         salaId: 'lab-3',
         vagas: 20,
         encontros: [
@@ -116,25 +116,25 @@ describe('F1 — criar e ler atividade', () => {
     assert.equal(body.cargaHorariaMinutos, 360)
   })
 
-  it('POST soma 50+50 minutos em 100, sem arredondamento', async () => {
+  it('POST soma 90+75 minutos em 165, sem arredondamento', async () => {
     await reset(port)
     const res = await fetch(`http://localhost:${port}/atividades`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },
       body: JSON.stringify({
         titulo: 'Palestra relâmpago',
-        tipo: 'palestra',
+        tipo: 'minicurso',
         salaId: 'sala-101',
         vagas: 10,
         encontros: [
-          { inicio: '2026-10-19T19:00:00-03:00', fim: '2026-10-19T19:50:00-03:00' },
-          { inicio: '2026-10-20T19:00:00-03:00', fim: '2026-10-20T19:50:00-03:00' }
+          { inicio: '2026-10-19T19:00:00-03:00', fim: '2026-10-19T20:30:00-03:00' },
+          { inicio: '2026-10-20T19:00:00-03:00', fim: '2026-10-20T20:15:00-03:00' }
         ]
       })
     })
     assert.equal(res.status, 201)
     const body = await res.json()
-    assert.equal(body.cargaHorariaMinutos, 100)
+    assert.equal(body.cargaHorariaMinutos, 165)
   })
 
   it('POST /atividades com participante devolve 403 SOMENTE_ORGANIZACAO', async () => {
@@ -165,7 +165,7 @@ describe('F1 — criar e ler atividade', () => {
       headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },
       body: JSON.stringify({
         titulo: 'Flutter do zero',
-        tipo: 'minicurso',
+        tipo: 'palestra',
         salaId: 'lab-3',
         vagas: 20,
         encontros: [
@@ -190,7 +190,7 @@ describe('F1 — criar e ler atividade', () => {
       headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },
       body: JSON.stringify({
         titulo: 'Flutter do zero',
-        tipo: 'minicurso',
+        tipo: 'palestra',
         salaId: 'lab-3',
         vagas: 20,
         encontros: [
@@ -283,20 +283,30 @@ describe('F1 — criar e ler atividade', () => {
     assert.equal(typeof body.mensagem, 'string')
   })
 
-  it('POST /_teste/reset apaga a atividade criada e devolve as salas iniciais', async () => {
+  it('POST /_teste/reset apaga a atividade criada e devolve os dados iniciais intactos', async () => {
     await reset(port)
-    await fetch(`http://localhost:${port}/atividades`, {
+    const criada = await fetch(`http://localhost:${port}/atividades`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Usuario': 'org-ana' },
       body: JSON.stringify({
         titulo: 'Flutter do zero',
-        tipo: 'minicurso',
+        tipo: 'palestra',
         salaId: 'lab-3',
         vagas: 20,
         encontros: [
           { inicio: '2026-10-19T19:00:00-03:00', fim: '2026-10-19T22:00:00-03:00' }
         ]
       })
+    })
+    assert.equal(criada.status, 201)
+    const antes = await (await fetch(`http://localhost:${port}/atividades`, {
+      headers: { 'X-Usuario': 'org-ana' }
+    })).json()
+    assert.equal(antes.length, 1)
+    await fetch(`http://localhost:${port}/_teste/relogio`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agora: '2026-10-20T10:00:00-03:00' })
     })
     const resetRes = await fetch(`http://localhost:${port}/_teste/reset`, {
       method: 'POST'
@@ -315,5 +325,7 @@ describe('F1 — criar e ler atividade', () => {
       { id: 'sala-102', nome: 'Sala 102', capacidade: 40 },
       { id: 'lab-3', nome: 'Laboratório 3', capacidade: 20 }
     ])
+    const relogioDepois = await (await fetch(`http://localhost:${port}/_teste/relogio`)).json()
+    assert.equal(Date.parse(relogioDepois.agora), Date.parse('2026-10-13T09:00:00-03:00'))
   })
 })
